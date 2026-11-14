@@ -132,7 +132,7 @@ async function viewEditor(id) {
     <label class="lbl">Ad break length<select class="fld" id="f-pod">${[[0, 'No ads'], [30, '30 seconds'], [60, '1 minute'], [90, '90 seconds'], [120, '2 minutes']].map(([v, l]) => opt(v, l, c.ad_break_seconds)).join('')}</select></label>
   </div>
   <div class="card grow" style="min-width:320px"><div class="h"><h2>Source</h2><span class="sub" id="sync-line"></span></div>
-    <label class="lbl">Source type<select class="fld" id="f-type">${opt('youtube', 'YouTube channel', s.type)}${opt('folder', 'Local folder', s.type)}</select></label>
+    <label class="lbl">Source type<select class="fld" id="f-type">${opt('youtube', 'YouTube channel', s.type)}${opt('folder', 'My own videos (from the media folder)', s.type)}</select></label>
     <div id="src-yt" class="cols" style="gap:16px">
       <label class="lbl grow" style="flex:2;min-width:240px">Channel URL<input class="fld" id="f-url" placeholder="https://www.youtube.com/@yourchannel" value="${esc(s.url)}"></label>
       <label class="lbl grow" style="min-width:110px">Keep latest<input class="fld" id="f-keep" type="number" min="1" max="100" value="${s.keep}"></label>
@@ -140,12 +140,25 @@ async function viewEditor(id) {
       <label class="lbl grow" style="min-width:110px">Max quality<select class="fld" id="f-quality">${[480, 720, 1080, 1440].map(v => opt(v, v + 'p', s.quality)).join('')}</select></label>
       <div class="sub" style="width:100%">Downloaded with yt-dlp. Older videos drop off the loop. Use only content you own or have permission to broadcast.</div>
     </div>
-    <div id="src-folder"><label class="lbl">Folder inside your media folder (blank = everything)<input class="fld" id="f-folder" list="dirs" value="${esc(s.folder)}"><datalist id="dirs">${dirs.map(d => `<option value="${esc(d)}">`).join('')}</datalist></label></div>
+    <div id="src-folder"><label class="lbl">Which videos<select class="fld" id="f-folder"><option value="">Everything in the media folder</option>${[...new Set([...dirs, ...(s.folder && !dirs.includes(s.folder) ? [s.folder] : [])])].map(d => opt(d, esc(d), s.folder)).join('')}</select></label>
+      <div class="sub" style="margin-top:6px">Plays your own videos from the media folder you mounted. Put videos in sub folders to make separate channels, one per folder.</div></div>
     <div class="h"><h2>Playlist</h2>${isNew ? '' : '<button class="btn" data-act="sync" data-id="' + c.id + '" id="sync-btn">Sync now</button>'}</div>
     <div id="pl" class="scroll"><div class="sub">${isNew ? 'Save the channel to see its playlist.' : 'Loading...'}</div></div>
   </div></div>`;
+  S.editNew = isNew; S.libFiles = null;
   toggleSource();
+  if (isNew) previewFolder();
   if (!isNew) { refreshPlaylist(c.id); S.timer = setInterval(() => refreshPlaylist(c.id), 4000); }
+}
+async function previewFolder() {
+  if (!S.editNew || !$('#pl')) return;
+  if ($('#f-type').value !== 'folder') { $('#pl').innerHTML = '<div class="sub">Save the channel to see its playlist.</div>'; return; }
+  if (!S.libFiles) S.libFiles = await api('GET', '/api/library/files');
+  const f = $('#f-folder').value;
+  const list = S.libFiles.filter(x => !f || x.rel.startsWith(f + '/'));
+  $('#pl').innerHTML = list.length
+    ? '<div class="sub">These will play, in this order, once you save:</div>' + list.map((v, i) => `<div class="row"><b style="width:28px">${i + 1}</b><div class="grow">${esc(f ? v.rel.slice(f.length + 1) : v.rel)}</div><span class="sub">${v.duration ? fmt(v.duration) : ''}</span></div>`).join('')
+    : '<div class="sub">No videos found there yet. Copy video files into the media folder you mapped in your compose file, then reopen this page.</div>';
 }
 function toggleSource() {
   const t = $('#f-type').value;
@@ -159,7 +172,7 @@ async function refreshPlaylist(id) {
     const d = await api('GET', `/api/channels/${id}/items`);
     const sl = $('#sync-line');
     if (sl) sl.textContent = d.sync_status && d.sync_status !== 'never' ? `Sync: ${d.sync_status}${d.next_sync && d.sync_status.startsWith('ok') ? ', next ' + clock(d.next_sync) : ''}` : '';
-    $('#pl').innerHTML = d.items.length ? d.items.map((v, i) => `<div class="row"><b style="width:28px">${i + 1}</b><div class="grow">${esc(v.title)}</div><span class="sub">${fmt(v.duration)}</span></div>`).join('') : '<div class="sub">Nothing to play yet.</div>';
+    $('#pl').innerHTML = d.items.length ? d.items.map((v, i) => `<div class="row"><b style="width:28px">${i + 1}</b><div class="grow">${esc(v.title)}</div><span class="sub">${fmt(v.duration)}</span></div>`).join('') : `<div class="sub">${$('#f-type').value === 'folder' ? 'Scanning your videos, this can take a moment for large files...' : 'Nothing to play yet.'}</div>`;
   } catch (e) {}
 }
 function readForm() {
@@ -326,7 +339,8 @@ document.addEventListener('click', async e => {
   } catch (err) { toast(err.message); }
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'f-type') toggleSource();
+  if (e.target.id === 'f-type') { toggleSource(); previewFolder(); }
+  if (e.target.id === 'f-folder') previewFolder();
   if (e.target.classList.contains('chk') && A.sel) A.sel.channel_ids = [...document.querySelectorAll('.chk:checked')].map(c => c.value);
 });
 document.addEventListener('input', e => {
