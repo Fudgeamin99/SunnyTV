@@ -85,7 +85,7 @@ def build_timeline(cfg, ch):
     pod = int(ch.get("ad_break_seconds") or 0)
     every = int(ch.get("ad_break_every", 15) or 0) * MINUTE
     key = (
-        tuple((v["path"], v["duration"]) for v in vids),
+        tuple((v["path"], v["duration"], v.get("subs")) for v in vids),
         tuple((a["path"], a["duration"]) for a in ads),
         pod, every,
     )

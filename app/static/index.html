@@ -202,7 +202,7 @@ async function refreshPlaylist(id) {
     const d = await api('GET', `/api/channels/${id}/items`);
     const sl = $('#sync-line');
     if (sl) sl.textContent = d.sync_status && d.sync_status !== 'never' ? `Sync: ${d.sync_status}${d.next_sync && d.sync_status.startsWith('ok') ? ', next ' + clock(d.next_sync) : ''}` : '';
-    $('#pl').innerHTML = d.items.length ? d.items.map((v, i) => `<div class="row"><b style="width:28px">${i + 1}</b><div class="grow">${esc(v.title)}</div><span class="sub">${fmt(v.duration)}</span></div>`).join('') : `<div class="sub">${$('#f-type').value === 'folder' ? 'Scanning your videos, this can take a moment for large files...' : 'Nothing to play yet.'}</div>`;
+    $('#pl').innerHTML = d.items.length ? d.items.map((v, i) => `<div class="row"><b style="width:28px">${i + 1}</b><div class="grow">${esc(v.title)}</div>${v.cc ? '<span class="sub" title="Subtitles ready" style="border:1.5px solid #35557a;border-radius:6px;padding:0 6px;font-weight:800">CC</span>' : ''}<span class="sub">${fmt(v.duration)}</span></div>`).join('') : `<div class="sub">${$('#f-type').value === 'folder' ? 'Scanning your videos, this can take a moment for large files...' : 'Nothing to play yet.'}</div>`;
   } catch (e) {}
 }
 function readForm() {

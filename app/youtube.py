@@ -120,12 +120,18 @@ def fetch_subs(video_id, dest, lang):
         return srt
     if os.path.exists(none):
         return None
-    _run(_base() + [
+    cmd = [c for c in _base() if c != "--no-warnings"] + [
         "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", f"{lang},{lang}-orig",
-        "--sub-format", "vtt", "--no-playlist",
+        "--sub-format", "vtt", "--no-playlist", "--sleep-subtitles", "2", "--retries", "5",
         "-o", os.path.join(dest, "%(id)s.%(ext)s"),
         f"https://www.youtube.com/watch?v={video_id}",
-    ], 300)
+    ]
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    log = (p.stdout + "\n" + p.stderr)
+    if p.returncode != 0 or "Unable to download" in log or "HTTP Error" in log:
+        # a real failure (rate limit, network): report it and try again next sync, do not remember "no captions"
+        lines = [l for l in log.splitlines() if "rror" in l or "Unable" in l]
+        raise RuntimeError((lines[-1] if lines else "caption download failed")[:240])
     vtts = sorted((f for f in os.listdir(dest) if f.startswith(video_id + ".") and f.endswith(".vtt")), key=len)
     ok = False
     if vtts:

@@ -243,7 +243,7 @@ def channel_items(ch_id: str):
         if s["kind"] != "video":
             continue
         if s.get("part", 0) == 0:
-            vids.append({"title": s["title"], "duration": 0.0})
+            vids.append({"title": s["title"], "duration": 0.0, "cc": bool(s.get("subs"))})
         # a video split by ad breaks is several parts: its length is where the last part ends
         vids[-1]["duration"] = s.get("src_start", 0.0) + s["duration"]
     return {"items": vids, "sync_status": ch.get("sync_status"), "last_sync": ch.get("last_sync"),
