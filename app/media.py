@@ -9,7 +9,8 @@ from . import store
 
 MEDIA_DIR = os.environ.get("MEDIA_DIR", "/media")
 CACHE_DIR = os.path.join(store.DATA_DIR, "cache")
-VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".ts", ".wmv", ".flv", ".mpg", ".mpeg"}
+VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".ts", ".wmv", ".flv", ".mpg", ".mpeg",
+             ".vob", ".m2ts", ".mts", ".3gp", ".ogv", ".divx"}
 
 _dur_path = os.path.join(store.DATA_DIR, "durations.json")
 _dur = {}

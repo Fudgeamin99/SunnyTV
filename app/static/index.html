@@ -181,7 +181,7 @@ async function viewLibrary(path) {
   const files = d.files.map(f => `<div class="row"><div class="grow">${esc(f.name)}</div><span class="sub">${f.duration ? fmt(f.duration) : 'scanning...'}</span></div>`).join('');
   let note = '';
   if (!d.mounted) note = `<div class="card"><h2>The media folder is not connected</h2><div class="sub">Nothing is mounted at <b>${esc(d.root)}</b> inside the container. In your compose file, the line ending in <b>:/media:ro</b> must point to a folder that exists on your NAS. You can ignore this if you only use YouTube channels.</div></div>`;
-  else if (!dirs && !files) note = `<div class="card"><h2>No videos here yet</h2><div class="sub">The media folder is connected but has no video files${path ? ' in this folder' : ''}. Copy .mp4, .mkv, .avi, .mov, .webm or .ts files into the folder you mapped to <b>${esc(d.root)}</b>, then refresh. This page only shows your own videos. YouTube downloads are not listed here.</div></div>`;
+  else if (!dirs && !files) note = `<div class="card"><h2>No videos here yet</h2><div class="sub">The media folder is connected but has no video files${path ? ' in this folder' : ''}. Copy .mp4, .mkv, .avi, .mov, .webm, .ts or .vob files into the folder you mapped to <b>${esc(d.root)}</b>, then refresh. This page only shows your own videos. YouTube downloads are not listed here.</div></div>`;
   $('#main').innerHTML = `<div class="h"><h1>Library</h1><button class="btn" data-act="lib" data-path="${esc(path)}">Refresh</button></div><div class="cols" style="gap:8px;align-items:center">${crumbs}</div>${note}${dirs}${files}`;
 }
 

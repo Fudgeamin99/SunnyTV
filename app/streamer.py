@@ -30,7 +30,9 @@ def out_dir(ch_id):
 
 def build_cmd(path, offset, remaining, out):
     w, h = RESOLUTION.split("x")
-    vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+    # Fix non-square pixels (DVD/VOB) and interlacing first, then fit into the frame.
+    vf = ("scale=trunc(iw*sar/2)*2:ih,setsar=1,yadif=deint=interlaced,"
+          f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
           f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p")
     return [
         "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
