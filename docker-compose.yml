@@ -6,7 +6,7 @@ services:
     container_name: sunny-tv
     restart: unless-stopped   # needed: the in-app Update button restarts the app by exiting it
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-8484}:8000"
     environment:
       TZ: ${TZ:-Europe/London}
       # Address your TV/Plex/Jellyfin uses to reach this server (goes into the M3U and guide).

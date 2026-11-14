@@ -6,10 +6,10 @@ services:
     container_name: sunny-tv
     restart: unless-stopped   # needed: the in-app Update button restarts the app by exiting it
     ports:
-      - "8000:8000"           # CHANGE the left number if port 8000 is taken on your NAS
+      - "8484:8000"           # CHANGE the left number if port 8484 is taken on your NAS
     environment:
       TZ: Europe/London
-      PUBLIC_URL: http://192.168.1.50:8000   # CHANGE to your NAS's IP and the port above
+      PUBLIC_URL: http://192.168.1.50:8484   # CHANGE to your NAS IP and the port above
       RESOLUTION: 1280x720
       VIDEO_BITRATE: 3000k
       X264_PRESET: veryfast

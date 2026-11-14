@@ -13,7 +13,7 @@ The image is built automatically by GitHub, so the NAS only has to pull it.
 2. In the NAS's **Docker** app, create a new **project** from a compose file and paste in
    [`docker-compose.nas.yml`](docker-compose.nas.yml). Change the lines marked `CHANGE`
    (the NAS's IP address and the two folder paths), then start it.
-3. Open `http://<nas-ip>:8000`.
+3. Open `http://<nas-ip>:8484`.
 4. First time only: GitHub makes new images private. In the repo go to **Packages > sunnytv > Package settings**
    and set visibility to **Public**, otherwise the NAS cannot pull it without logging in.
 
@@ -24,7 +24,7 @@ encode while someone is watching.
 
 ```bash
 git clone https://github.com/Fudgeamin99/SunnyTV && cd SunnyTV
-cp .env.example .env        # set PUBLIC_URL to e.g. http://192.168.1.50:8000
+cp .env.example .env        # set PUBLIC_URL to e.g. http://192.168.1.50:8484
 docker compose up -d
 ```
 
