@@ -175,10 +175,14 @@ function readForm() {
 async function viewLibrary(path) {
   const d = await api('GET', '/api/library?path=' + encodeURIComponent(path));
   const parts = path ? path.split('/') : [];
-  const crumbs = ['<button class="btn" data-act="lib" data-path="">media</button>'].concat(parts.map((p, i) => `<button class="btn" data-act="lib" data-path="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join(' / ');
+  const root = path ? '<button class="btn" data-act="lib" data-path="">media</button>' : '<b>media</b>';
+  const crumbs = [root].concat(parts.map((p, i) => i === parts.length - 1 ? `<b>${esc(p)}</b>` : `<button class="btn" data-act="lib" data-path="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join(' / ');
   const dirs = d.dirs.map(n => `<div class="row click" data-act="lib" data-path="${esc((path ? path + '/' : '') + n)}"><b>${esc(n)}</b><span class="sub">folder</span></div>`).join('');
   const files = d.files.map(f => `<div class="row"><div class="grow">${esc(f.name)}</div><span class="sub">${f.duration ? fmt(f.duration) : 'scanning...'}</span></div>`).join('');
-  $('#main').innerHTML = `<div class="h"><h1>Library</h1></div><div class="cols" style="gap:8px;align-items:center">${crumbs}</div>${dirs}${files || (dirs ? '' : '<div class="sub">No video files here. Put videos in the media folder you mounted in docker-compose.</div>')}`;
+  let note = '';
+  if (!d.mounted) note = `<div class="card"><h2>The media folder is not connected</h2><div class="sub">Nothing is mounted at <b>${esc(d.root)}</b> inside the container. In your compose file, the line ending in <b>:/media:ro</b> must point to a folder that exists on your NAS. You can ignore this if you only use YouTube channels.</div></div>`;
+  else if (!dirs && !files) note = `<div class="card"><h2>No videos here yet</h2><div class="sub">The media folder is connected but has no video files${path ? ' in this folder' : ''}. Copy .mp4, .mkv, .avi, .mov, .webm or .ts files into the folder you mapped to <b>${esc(d.root)}</b>, then refresh. This page only shows your own videos. YouTube downloads are not listed here.</div></div>`;
+  $('#main').innerHTML = `<div class="h"><h1>Library</h1><button class="btn" data-act="lib" data-path="${esc(path)}">Refresh</button></div><div class="cols" style="gap:8px;align-items:center">${crumbs}</div>${note}${dirs}${files}`;
 }
 
 /* ---------- Adverts ---------- */

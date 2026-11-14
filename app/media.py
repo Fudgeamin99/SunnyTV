@@ -142,7 +142,8 @@ def browse(rel=""):
                 dirs.append(e.name)
             elif os.path.splitext(e.name)[1].lower() in VIDEO_EXT:
                 files.append({"name": e.name, "rel": rel_path(e.path), "duration": get_duration(e.path)})
-    return {"path": rel_path(root) if rel else "", "dirs": dirs, "files": files}
+    return {"path": rel_path(root) if rel else "", "dirs": dirs, "files": files,
+            "mounted": os.path.isdir(os.path.realpath(MEDIA_DIR)), "root": MEDIA_DIR}
 
 
 def all_dirs(max_depth=3):
