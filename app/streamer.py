@@ -97,6 +97,8 @@ class Runner:
                     self.stop_evt.wait(2)
                     continue
                 started = time.time()
+                last_check = started
+                adkey = tl["adkey"]
                 log = open(os.path.join(LOG_DIR, f"{ch['number']}.log"), "ab")
                 try:
                     self.proc = subprocess.Popen(
@@ -111,6 +113,12 @@ class Runner:
                                 self.proc.kill()
                             break
                         time.sleep(0.5)
+                        if time.time() - last_check > 3:
+                            last_check = time.time()
+                            c2 = store.load()
+                            ch2 = store.find_channel(c2, self.ch_id)
+                            if not ch2 or schedule.build_timeline(c2, ch2)["adkey"] != adkey:
+                                self.proc.terminate()   # ad settings changed: re-plan from the new schedule
                 finally:
                     log.close()
                 if time.time() - started < 2 and rem > 5:

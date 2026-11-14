@@ -108,7 +108,8 @@ def build_timeline(cfg, ch):
         s["start"] = t
         starts.append(t)
         t += s["duration"]
-    tl = {"segments": segs, "starts": starts, "total": t}
+    tl = {"segments": segs, "starts": starts, "total": t,
+          "adkey": (pod, every, tuple(a["path"] for a in ads))}
     _cache[ch["id"]] = (key, tl)
     return tl
 
@@ -137,17 +138,23 @@ def programmes(tl, ch, hours=6, t=None):
     i = p["index"]
     cursor = t - p["offset"]
     out, cur, n = [], None, 0
-    while cursor < horizon and n < 5000:
+    while cursor < horizon and n < 30000:
         seg = segs[i]
         end = cursor + seg["duration"]
         if seg["kind"] == "video" and seg.get("part", 0) == 0:
-            cur = {"title": seg["title"], "start": cursor, "stop": end, "ad": False}
+            cur = {"title": seg["title"], "start": cursor, "stop": end, "ad": False, "breaks": []}
             out.append(cur)
         elif cur is None:
             cur = {"title": "Ad break" if seg["kind"] == "ad" else seg["title"],
-                   "start": cursor, "stop": end, "ad": seg["kind"] == "ad"}
+                   "start": cursor, "stop": end, "ad": seg["kind"] == "ad",
+                   "breaks": [[cursor, end]] if seg["kind"] == "ad" else []}
             out.append(cur)
         else:
+            if seg["kind"] == "ad":
+                if cur["breaks"] and abs(cur["breaks"][-1][1] - cursor) < 0.01:
+                    cur["breaks"][-1][1] = end
+                else:
+                    cur["breaks"].append([cursor, end])
             cur["stop"] = end
         cursor = end
         i = (i + 1) % len(segs)

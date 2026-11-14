@@ -283,7 +283,8 @@ def apply_group(gid: str, body: ApplyIn):
 # ---------- guide + IPTV outputs ----------
 
 @app.get("/api/guide")
-def guide(hours: int = 6):
+def guide(hours: int = 168):
+    hours = max(1, min(hours, 168))
     cfg = store.load()
     t = time.time()
     chans = []
@@ -361,7 +362,8 @@ def _xt(t):
 
 
 @app.get("/iptv/xmltv.xml")
-def xmltv(hours: int = 24):
+def xmltv(hours: int = 168):
+    hours = max(1, min(hours, 168))
     cfg = store.load()
     t = time.time()
     parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv generator-info-name="Sunny TV">']

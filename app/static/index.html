@@ -43,6 +43,8 @@ h2{margin:0;font-family:Fredoka,sans-serif;font-weight:500;font-size:19px}
 .grid .track{position:relative;flex:1;height:52px}
 .blk{position:absolute;top:0;bottom:0;border:2px solid #bcd9ee;border-radius:10px;background:#e6f3fc;padding:6px 8px;font-size:13px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .blk.now{background:#fff3b8;border-color:#f7a541}
+.brk{position:absolute;left:0;bottom:0;height:8px;background:repeating-linear-gradient(45deg,#f7a541 0 4px,#ffd23f 4px 8px);border-radius:4px}
+.bt{position:relative;z-index:1}
 .tick{position:absolute;top:0;font-size:12px;font-weight:700;color:#4a6785;border-left:2px solid #bcd9ee;padding-left:4px;height:100%}
 video{width:100%;max-height:380px;background:#000;border-radius:12px}
 .toast{position:fixed;bottom:24px;right:24px;background:#1e3a5f;color:#fff;padding:12px 20px;border-radius:12px;font-weight:700;z-index:9}
@@ -130,6 +132,7 @@ async function viewEditor(id) {
     <label class="lbl">Advert group<select class="fld" id="f-ad"><option value="">None</option>${groups.map(g => opt(g.id, esc(g.name), c.ad_group_id)).join('')}</select></label>
     <label class="lbl">Ad break every<select class="fld" id="f-every">${[[0, 'Only between videos'], [10, '10 minutes'], [15, '15 minutes'], [20, '20 minutes'], [30, '30 minutes']].map(([v, l]) => opt(v, l, c.ad_break_every ?? 15)).join('')}</select></label>
     <label class="lbl">Ad break length<select class="fld" id="f-pod">${[[0, 'No ads'], [30, '30 seconds'], [60, '1 minute'], [90, '90 seconds'], [120, '2 minutes']].map(([v, l]) => opt(v, l, c.ad_break_seconds)).join('')}</select></label>
+    <div class="sub" id="ad-hint" aria-live="polite"></div>
   </div>
   <div class="card grow" style="min-width:320px"><div class="h"><h2>Source</h2><span class="sub" id="sync-line"></span></div>
     <label class="lbl">Source type<select class="fld" id="f-type">${opt('youtube', 'YouTube channel', s.type)}${opt('folder', 'My own videos (from the media folder)', s.type)}</select></label>
@@ -145,10 +148,21 @@ async function viewEditor(id) {
     <div class="h"><h2>Playlist</h2>${isNew ? '' : '<button class="btn" data-act="sync" data-id="' + c.id + '" id="sync-btn">Sync now</button>'}</div>
     <div id="pl" class="scroll"><div class="sub">${isNew ? 'Save the channel to see its playlist.' : 'Loading...'}</div></div>
   </div></div>`;
-  S.editNew = isNew; S.libFiles = null;
+  S.editNew = isNew; S.libFiles = null; S.groups = groups;
   toggleSource();
+  adHint();
   if (isNew) previewFolder();
   if (!isNew) { refreshPlaylist(c.id); S.timer = setInterval(() => refreshPlaylist(c.id), 4000); }
+}
+function adHint() {
+  const el = $('#ad-hint'); if (!el) return;
+  const gid = $('#f-ad').value, pod = parseInt($('#f-pod').value, 10), every = parseInt($('#f-every').value, 10);
+  const g = (S.groups || []).find(x => x.id === gid);
+  const len = pod >= 60 && pod % 60 === 0 ? `${pod / 60} minute` : `${pod} second`;
+  if (!g) el.textContent = 'No advert group picked, so no ad breaks will play. Choose one above.';
+  else if (!g.clips.length) el.textContent = `"${g.name}" has no adverts in it yet. Add some on the Adverts page.`;
+  else if (!pod) el.textContent = 'Break length is set to No ads, so no breaks will play.';
+  else el.textContent = `A ${len} break from "${g.name}" (${g.clips.length} adverts) plays ${every ? 'every ' + every + ' minutes and ' : ''}after each video. Changes apply to the running channel within a few seconds.`;
 }
 async function previewFolder() {
   if (!S.editNew || !$('#pl')) return;
@@ -223,7 +237,7 @@ function renderAdverts() {
       <div><button class="btn p" data-act="add-picked">Add selected</button> <button class="btn" data-act="toggle-add">Close</button></div></div>` : '';
     right = `<div class="card grow" style="min-width:320px"><label class="lbl">Group name<input class="fld" id="g-name" value="${esc(s.name)}"></label>
       <div class="h"><h2>Adverts in group</h2><button class="btn" data-act="toggle-add">Add adverts</button></div>${picker}
-      ${s.clips.map((r, i) => `<div class="row"><b style="width:24px">${i + 1}</b><div class="grow">${esc(r)}</div><span class="sub">${dur(r)}</span><button class="btn" data-act="rm-clip" data-i="${i}" aria-label="Remove">Remove</button></div>`).join('') || '<div class="sub">No adverts yet. Put ad clips in your media folder, then add them here.</div>'}
+      ${s.clips.map((r, i) => `<div class="row"><b style="width:24px">${i + 1}</b><div class="grow">${esc(r)}</div><span class="sub">${dur(r) || 'checking...'}</span><button class="btn" data-act="rm-clip" data-i="${i}" aria-label="Remove">Remove</button></div>`).join('') || '<div class="sub">No adverts yet. Put ad clips in your media folder, then add them here.</div>'}
       <h2>Apply to channels</h2><div class="cols" style="gap:12px">${A.channels.map(c => `<label class="row" style="flex:1;min-width:200px;gap:12px"><input type="checkbox" class="chk" value="${c.id}" ${s.channel_ids.includes(c.id) ? 'checked' : ''} style="width:22px;height:22px;accent-color:#f7a541">${c.number} ${esc(c.name)}</label>`).join('') || '<div class="sub">No channels yet.</div>'}</div>
       <div class="sub">Each channel sets how often a break plays (for example every 15 minutes, and after each video) and how long it lasts. Ads rotate through the group.</div>
       <div class="cols" style="gap:12px"><button class="btn p" data-act="save-group">Save group</button><button class="btn danger" data-act="del-group">Delete group</button></div></div>`;
@@ -232,40 +246,62 @@ function renderAdverts() {
 }
 
 /* ---------- Guide ---------- */
-function guideGrid(g) {
-  const W = 6 * 3600, t0 = Math.floor(g.now / 1800) * 1800, t1 = t0 + W + 1800;
-  const span = t1 - t0, pct = t => ((t - t0) / span * 100);
+const G = {data: null, t0: 0, win: 6};
+const dayLabel = t => new Date(t * 1000).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+function dayStart(offset) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d.getTime() / 1000; }
+function clampWindow() {
+  const first = Math.floor(G.data.now / 1800) * 1800, last = G.data.now + 168 * 3600 - G.win * 3600;
+  G.t0 = Math.max(first, Math.min(G.t0, last));
+}
+function guideGrid() {
+  const g = G.data, W = G.win * 3600, t0 = G.t0, t1 = t0 + W;
+  const pct = t => ((t - t0) / W * 100);
+  const step = G.win <= 6 ? 1800 : G.win <= 12 ? 3600 : 7200;
   let ticks = '';
-  for (let t = t0; t < t1; t += 1800) ticks += `<div class="tick" style="left:${pct(t)}%">${clock(t)}</div>`;
+  for (let t = Math.ceil(t0 / step) * step; t < t1; t += step) {
+    const d = new Date(t * 1000), mid = d.getHours() === 0 && d.getMinutes() === 0;
+    ticks += `<div class="tick" style="left:${pct(t)}%">${mid ? dayLabel(t) + ' ' : ''}${clock(t)}</div>`;
+  }
   const rows = g.channels.map(c => {
     const blocks = c.programmes.map(p => {
       const a = Math.max(p.start, t0), b = Math.min(p.stop, t1);
       if (b <= a) return '';
       const now = p.start <= g.now && p.stop > g.now;
-      return `<div class="blk ${now ? 'now' : ''}" title="${esc(p.title)} ${clock(p.start)}" style="left:${pct(a)}%;width:${(b - a) / span * 100}%">${esc(p.title)}</div>`;
+      const brk = (p.breaks || []).map(([bs, be]) => {
+        const x = Math.max(bs, a), y = Math.min(be, b);
+        return y <= x ? '' : `<span class="brk" title="Ad break ${clock(bs)} to ${clock(be)}" style="left:${(x - a) / (b - a) * 100}%;width:${Math.max((y - x) / (b - a) * 100, 0.6)}%"></span>`;
+      }).join('');
+      return `<div class="blk ${now ? 'now' : ''}" title="${esc(p.title)} (${clock(p.start)} to ${clock(p.stop)})" style="left:${pct(a)}%;width:${(b - a) / W * 100}%"><span class="bt">${esc(p.title)}</span>${brk}</div>`;
     }).join('');
     return `<div class="line"><div class="name" data-act="watch" data-num="${c.number}" data-name="${esc(c.name)}">${c.number} ${esc(c.name)}</div><div class="track">${blocks}</div></div>`;
   }).join('') || '<div class="sub">No channels yet.</div>';
-  return `<div class="grid"><div class="line"><div style="width:170px;flex:none"></div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div>`;
+  return `<div class="grid"><div class="line"><div class="sub" style="width:170px;flex:none;align-self:center">${dayLabel(t0)}</div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div>`;
 }
-function setGuideUpdated(t) { const e = $('#g-updated'); if (e) e.textContent = 'Updated ' + clock(t); }
+function renderGuide() { const el = $('#guide-grid'); if (el && G.data) { clampWindow(); el.innerHTML = guideGrid(); $('#g-updated').textContent = 'Updated ' + clock(G.data.now); } }
 async function refreshGuide(quiet) {
   const btn = $('#g-refresh');
   if (btn && !quiet) btn.disabled = true;
   try {
-    const g = await api('GET', '/api/guide?hours=6');
-    const el = $('#guide-grid');
-    if (el) { el.innerHTML = guideGrid(g); setGuideUpdated(g.now); }
+    G.data = await api('GET', '/api/guide?hours=168');
+    renderGuide();
     if (!quiet) toast('Guide refreshed');
   } catch (e) { if (!quiet) toast(e.message); }
   finally { if (btn) btn.disabled = false; }
 }
 async function viewGuide() {
-  const g = await api('GET', '/api/guide?hours=6');
-  $('#main').innerHTML = `<div class="h"><h1>Guide</h1><div class="cols" style="gap:12px;align-items:center"><span class="sub" id="g-updated"></span><button class="btn" data-act="guide-refresh" id="g-refresh">Refresh guide</button></div></div>
+  G.data = await api('GET', '/api/guide?hours=168');
+  G.t0 = Math.floor(G.data.now / 1800) * 1800;
+  const days = [0, 1, 2, 3, 4, 5, 6].map(i => `<option value="${i}">${i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(dayStart(i) * 1000).toLocaleDateString([], {weekday: 'long'})}</option>`).join('');
+  $('#main').innerHTML = `<div class="h"><h1>Guide</h1><div class="cols" style="gap:10px;align-items:center">
+      <span class="sub" id="g-updated"></span>
+      <button class="btn" data-act="g-earlier">Earlier</button><button class="btn" data-act="g-now">Now</button><button class="btn" data-act="g-later">Later</button>
+      <select class="fld" id="g-day" style="width:auto" aria-label="Jump to day">${days}</select>
+      <select class="fld" id="g-win" style="width:auto" aria-label="Hours shown"><option value="3">3 hours</option><option value="6" selected>6 hours</option><option value="12">12 hours</option><option value="24">24 hours</option></select>
+      <button class="btn" data-act="guide-refresh" id="g-refresh">Refresh guide</button></div></div>
     <div class="card"><div class="h"><h2 id="pv-title">Preview</h2><span class="sub">Click a channel name below to watch. The stream can take about 10 seconds to start</span></div><video id="pv" controls muted playsinline></video></div>
-    <div class="gridwrap" id="guide-grid">${guideGrid(g)}</div>`;
-  setGuideUpdated(g.now);
+    <div class="sub">The guide covers the next 7 days. The striped bar along the bottom of a programme marks its ad breaks.</div>
+    <div class="gridwrap" id="guide-grid"></div>`;
+  renderGuide();
   S.timer = setInterval(() => { if (S.view === 'guide') refreshGuide(true); }, 60000);
 }
 function watch(num, name) {
@@ -338,6 +374,9 @@ document.addEventListener('click', async e => {
         return waitForRestart();
       }
       case 'guide-refresh': return refreshGuide(false);
+      case 'g-earlier': G.t0 -= G.win * 3600; return renderGuide();
+      case 'g-later': G.t0 += G.win * 3600; return renderGuide();
+      case 'g-now': G.t0 = Math.floor(G.data.now / 1800) * 1800; $('#g-day').value = '0'; return renderGuide();
       case 'lib': return go('library', d.path);
       case 'watch': return watch(d.num, d.name);
       case 'pick-group': return pickGroup(d.id);
@@ -357,7 +396,10 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'f-type') { toggleSource(); previewFolder(); }
+  if (e.target.id === 'g-win') { G.win = parseInt(e.target.value, 10); renderGuide(); }
+  if (e.target.id === 'g-day') { const i = parseInt(e.target.value, 10); G.t0 = i === 0 ? Math.floor(G.data.now / 1800) * 1800 : dayStart(i); renderGuide(); }
   if (e.target.id === 'f-folder') previewFolder();
+  if (['f-ad', 'f-pod', 'f-every'].includes(e.target.id)) adHint();
   if (e.target.classList.contains('chk') && A.sel) A.sel.channel_ids = [...document.querySelectorAll('.chk:checked')].map(c => c.value);
 });
 document.addEventListener('input', e => {
