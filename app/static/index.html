@@ -290,7 +290,27 @@ function guideGrid() {
   }).join('') || '<div class="sub">No channels yet.</div>';
   return `<div class="grid"><div class="line"><div class="sub" style="width:170px;flex:none;align-self:center">${dayLabel(t0)}</div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div>`;
 }
-function renderGuide() { const el = $('#guide-grid'); if (el && G.data) { clampWindow(); el.innerHTML = guideGrid(); $('#g-updated').textContent = 'Updated ' + clock(G.data.now); } }
+function upNext() {
+  const g = G.data, tm = t => `${clock(t)}`;
+  const mins = s => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60 ? m % 60 + 'm' : ''}`.trim() : `${m}m`; };
+  return g.channels.map(c => {
+    const list = c.programmes.filter(p => p.stop > g.now).slice(0, 10);
+    const rows = list.map((p, i) => {
+      const now = p.start <= g.now;
+      const nb = (p.breaks || []).filter(b => b[1] > g.now).length;
+      const when = now ? `Now, until ${tm(p.stop)}` : `${i === 1 ? 'Next ' : ''}${tm(p.start)}`;
+      return `<div class="row" style="min-height:40px;${now ? 'background:#fff3c4;border-radius:10px' : ''}"><b style="width:150px;flex:none">${when}</b><div class="grow">${p.ad ? 'Ad break' : esc(p.title)}</div><span class="sub">${mins(p.stop - p.start)}${nb ? ` · ${nb} ad break${nb > 1 ? 's' : ''}` : ''}</span></div>`;
+    }).join('') || '<div class="sub">Nothing scheduled.</div>';
+    return `<div class="card" style="flex:1;min-width:340px"><h2>${c.number} ${esc(c.name)}: coming up</h2>${rows}</div>`;
+  }).join('');
+}
+function renderGuide() {
+  const el = $('#guide-grid');
+  if (el && G.data) {
+    clampWindow(); el.innerHTML = guideGrid(); $('#g-updated').textContent = 'Updated ' + clock(G.data.now);
+    const u = $('#up-next'); if (u) u.innerHTML = upNext();
+  }
+}
 async function refreshGuide(quiet) {
   const btn = $('#g-refresh');
   if (btn && !quiet) btn.disabled = true;
@@ -313,7 +333,8 @@ async function viewGuide() {
       <button class="btn" data-act="guide-refresh" id="g-refresh">Refresh guide</button></div></div>
     <div class="card"><div class="h"><h2 id="pv-title">Preview</h2><span class="sub">Click a channel name below to watch. The stream can take about 10 seconds to start</span></div><video id="pv" controls muted playsinline></video></div>
     <div class="sub">The guide covers the next 7 days. The striped bar along the bottom of a programme marks its ad breaks.</div>
-    <div class="gridwrap" id="guide-grid"></div>`;
+    <div class="gridwrap" id="guide-grid"></div>
+    <h2 style="margin:18px 0 8px">Up next</h2><div class="cols" id="up-next" style="gap:14px;align-items:flex-start"></div>`;
   renderGuide();
   S.timer = setInterval(() => { if (S.view === 'guide') refreshGuide(true); }, 60000);
 }
