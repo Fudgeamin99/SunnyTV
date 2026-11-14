@@ -116,7 +116,7 @@ async function viewChannels() {
 async function viewEditor(id) {
   const isNew = id === 'new';
   const [groups, dirs, chs] = await Promise.all([api('GET', '/api/ad-groups'), api('GET', '/api/library/dirs'), api('GET', '/api/channels')]);
-  const c = isNew ? {number: Math.max(0, ...chs.map(x => x.number)) + 1, name: '', source: {type: 'youtube', folder: '', url: '', keep: 15, refresh_hours: 6, quality: 1080}, order: 'sequential', ad_group_id: null, ad_break_seconds: 60} : chs.find(x => x.id === id);
+  const c = isNew ? {number: Math.max(0, ...chs.map(x => x.number)) + 1, name: '', source: {type: 'youtube', folder: '', url: '', keep: 15, refresh_hours: 6, quality: 1080}, order: 'sequential', ad_group_id: null, ad_break_seconds: 60, ad_break_every: 15} : chs.find(x => x.id === id);
   if (!c) throw new Error('Channel not found');
   const s = c.source;
   const opt = (v, label, cur) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${label}</option>`;
@@ -128,7 +128,8 @@ async function viewEditor(id) {
     <label class="lbl">Name<input class="fld" id="f-name" value="${esc(c.name)}"></label>
     <label class="lbl">Playback order<select class="fld" id="f-order">${opt('sequential', 'Sequential', c.order)}${opt('shuffle', 'Shuffle (fixed order per channel)', c.order)}</select></label>
     <label class="lbl">Advert group<select class="fld" id="f-ad"><option value="">None</option>${groups.map(g => opt(g.id, esc(g.name), c.ad_group_id)).join('')}</select></label>
-    <label class="lbl">Ad break after each video<select class="fld" id="f-pod">${[[0, 'No ads'], [30, '30 seconds'], [60, '1 minute'], [90, '90 seconds'], [120, '2 minutes']].map(([v, l]) => opt(v, l, c.ad_break_seconds)).join('')}</select></label>
+    <label class="lbl">Ad break every<select class="fld" id="f-every">${[[0, 'Only between videos'], [10, '10 minutes'], [15, '15 minutes'], [20, '20 minutes'], [30, '30 minutes']].map(([v, l]) => opt(v, l, c.ad_break_every ?? 15)).join('')}</select></label>
+    <label class="lbl">Ad break length<select class="fld" id="f-pod">${[[0, 'No ads'], [30, '30 seconds'], [60, '1 minute'], [90, '90 seconds'], [120, '2 minutes']].map(([v, l]) => opt(v, l, c.ad_break_seconds)).join('')}</select></label>
   </div>
   <div class="card grow" style="min-width:320px"><div class="h"><h2>Source</h2><span class="sub" id="sync-line"></span></div>
     <label class="lbl">Source type<select class="fld" id="f-type">${opt('youtube', 'YouTube channel', s.type)}${opt('folder', 'Local folder', s.type)}</select></label>
@@ -165,7 +166,7 @@ function readForm() {
   const type = $('#f-type').value;
   return {
     number: parseInt($('#f-number').value, 10), name: $('#f-name').value.trim(), order: $('#f-order').value,
-    ad_group_id: $('#f-ad').value || null, ad_break_seconds: parseInt($('#f-pod').value, 10),
+    ad_group_id: $('#f-ad').value || null, ad_break_seconds: parseInt($('#f-pod').value, 10), ad_break_every: parseInt($('#f-every').value, 10),
     source: {type, folder: $('#f-folder').value.trim(), url: $('#f-url').value.trim(), keep: parseInt($('#f-keep').value, 10) || 15,
              refresh_hours: parseFloat($('#f-refresh').value), quality: parseInt($('#f-quality').value, 10)},
   };
@@ -211,7 +212,7 @@ function renderAdverts() {
       <div class="h"><h2>Adverts in group</h2><button class="btn" data-act="toggle-add">Add adverts</button></div>${picker}
       ${s.clips.map((r, i) => `<div class="row"><b style="width:24px">${i + 1}</b><div class="grow">${esc(r)}</div><span class="sub">${dur(r)}</span><button class="btn" data-act="rm-clip" data-i="${i}" aria-label="Remove">Remove</button></div>`).join('') || '<div class="sub">No adverts yet. Put ad clips in your media folder, then add them here.</div>'}
       <h2>Apply to channels</h2><div class="cols" style="gap:12px">${A.channels.map(c => `<label class="row" style="flex:1;min-width:200px;gap:12px"><input type="checkbox" class="chk" value="${c.id}" ${s.channel_ids.includes(c.id) ? 'checked' : ''} style="width:22px;height:22px;accent-color:#f7a541">${c.number} ${esc(c.name)}</label>`).join('') || '<div class="sub">No channels yet.</div>'}</div>
-      <div class="sub">An advert break plays after each video, for the length you set per channel. Ads rotate through the group.</div>
+      <div class="sub">Each channel sets how often a break plays (for example every 15 minutes, and after each video) and how long it lasts. Ads rotate through the group.</div>
       <div class="cols" style="gap:12px"><button class="btn p" data-act="save-group">Save group</button><button class="btn danger" data-act="del-group">Delete group</button></div></div>`;
   }
   $('#main').innerHTML = `<div class="h"><h1>Adverts</h1><button class="btn p" data-act="new-group">New group</button></div><div class="cols"><div class="card" style="width:290px"><h2>Groups</h2>${list}</div>${right}</div>`;

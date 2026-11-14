@@ -120,8 +120,8 @@ To build from source instead of pulling the image:
   re-encoded to one resolution and bitrate (`RESOLUTION`, `VIDEO_BITRATE`) so items join up cleanly.
 - **YouTube channels** are re-checked on the refresh interval you set. New uploads join the loop and videos
   outside the latest N are deleted from disk.
-- **Advert groups** are lists of clips from your media folder. A break plays after each video for the
-  length set on the channel, rotating through the group. Apply a group to many channels from the Adverts page.
+- **Advert groups** are lists of clips from your media folder. Each channel sets how often a break plays
+  (default every 15 minutes, plus after each video) and how long it lasts, rotating through the group. Apply a group to many channels from the Adverts page.
 
 ## Folders
 

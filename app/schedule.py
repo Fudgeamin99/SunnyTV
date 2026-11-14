@@ -55,31 +55,53 @@ def ad_clips(cfg, ch):
     return out
 
 
+MINUTE = 60          # seconds per minute (tests shrink this)
+MIN_TAIL = 60        # do not leave a final part shorter than this
+
+
+def _pod(ads, pod, ai):
+    """Ad segments filling about `pod` seconds. Returns (segments, next ad index)."""
+    out, filled, n = [], 0.0, 0
+    while filled < pod and n < 20:
+        a = ads[ai % len(ads)]
+        ai += 1
+        n += 1
+        out.append({**a, "kind": "ad", "part": 0, "src_start": 0.0})
+        filled += a["duration"]
+    return out, ai
+
+
 def build_timeline(cfg, ch):
     vids = channel_videos(ch)
     ads = ad_clips(cfg, ch)
     pod = int(ch.get("ad_break_seconds") or 0)
+    every = int(ch.get("ad_break_every", 15) or 0) * MINUTE
     key = (
         tuple((v["path"], v["duration"]) for v in vids),
         tuple((a["path"], a["duration"]) for a in ads),
-        pod,
+        pod, every,
     )
     hit = _cache.get(ch["id"])
     if hit and hit[0] == key:
         return hit[1]
 
+    breaks = bool(ads and pod > 0)
     segs = []
     ai = 0
     for v in vids:
-        segs.append({**v, "kind": "video"})
-        if ads and pod > 0:
-            filled, n = 0.0, 0
-            while filled < pod and n < 20:
-                a = ads[ai % len(ads)]
-                ai += 1
-                n += 1
-                segs.append({**a, "kind": "ad"})
-                filled += a["duration"]
+        cuts = []
+        if breaks and every > 0:
+            t = every
+            while v["duration"] - t >= MIN_TAIL:
+                cuts.append(t)
+                t += every
+        bounds = [0.0] + cuts + [v["duration"]]
+        for pi in range(len(bounds) - 1):
+            segs.append({**v, "kind": "video", "part": pi, "src_start": bounds[pi],
+                         "duration": bounds[pi + 1] - bounds[pi]})
+            if breaks:
+                podsegs, ai = _pod(ads, pod, ai)
+                segs.extend(podsegs)
     t = 0.0
     starts = []
     for s in segs:
@@ -105,7 +127,7 @@ def position(tl, ch, t=None):
 
 
 def programmes(tl, ch, hours=6, t=None):
-    """Guide entries. Each video's slot runs through its advert pod."""
+    """Guide entries. A video (all its parts, with the ad breaks between them) is one entry."""
     t = time.time() if t is None else t
     p = position(tl, ch, t)
     if not p:
@@ -118,11 +140,12 @@ def programmes(tl, ch, hours=6, t=None):
     while cursor < horizon and n < 5000:
         seg = segs[i]
         end = cursor + seg["duration"]
-        if seg["kind"] == "video":
+        if seg["kind"] == "video" and seg.get("part", 0) == 0:
             cur = {"title": seg["title"], "start": cursor, "stop": end, "ad": False}
             out.append(cur)
         elif cur is None:
-            cur = {"title": "Ad break", "start": cursor, "stop": end, "ad": True}
+            cur = {"title": "Ad break" if seg["kind"] == "ad" else seg["title"],
+                   "start": cursor, "stop": end, "ad": seg["kind"] == "ad"}
             out.append(cur)
         else:
             cur["stop"] = end

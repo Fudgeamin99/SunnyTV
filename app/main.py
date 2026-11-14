@@ -48,6 +48,7 @@ class ChannelIn(BaseModel):
     order: Literal["sequential", "shuffle"] = "sequential"
     ad_group_id: Optional[str] = None
     ad_break_seconds: int = Field(60, ge=0, le=600)
+    ad_break_every: int = Field(15, ge=0, le=120)
 
 
 class AdGroupIn(BaseModel):
@@ -72,10 +73,10 @@ def public(cfg, ch):
     if pos:
         s = pos["segment"]
         now = {"title": s["title"], "kind": s["kind"], "offset": pos["offset"], "remaining": pos["remaining"]}
-    vids = [s for s in tl["segments"] if s["kind"] == "video"]
+    vids = [s for s in tl["segments"] if s["kind"] == "video" and s.get("part", 0) == 0]
     out = {k: ch.get(k) for k in ("id", "number", "name", "source", "order", "ad_group_id",
                                   "ad_break_seconds", "sync_status", "last_sync")}
-    out.update({"videos": len(vids), "now": now, "live": streamer.is_live(ch["id"])})
+    out.update({"ad_break_every": ch.get("ad_break_every", 15), "videos": len(vids), "now": now, "live": streamer.is_live(ch["id"])})
     return out
 
 
@@ -162,7 +163,8 @@ def update_channel(ch_id: str, body: ChannelIn):
         if new["type"] == "youtube":
             resync = old.get("type") != "youtube" or any(old.get(k) != new[k] for k in ("url", "keep", "quality"))
         ch.update(number=body.number, name=body.name, source=new, order=body.order,
-                  ad_group_id=body.ad_group_id, ad_break_seconds=body.ad_break_seconds)
+                  ad_group_id=body.ad_group_id, ad_break_seconds=body.ad_break_seconds,
+                  ad_break_every=body.ad_break_every)
     if resync:
         youtube.enqueue(ch_id)
     media.kick()
@@ -194,7 +196,7 @@ def channel_items(ch_id: str):
     cfg = store.load()
     ch = get_channel_or_404(cfg, ch_id)
     tl = schedule.build_timeline(cfg, ch)
-    vids = [{"title": s["title"], "duration": s["duration"]} for s in tl["segments"] if s["kind"] == "video"]
+    vids = [{"title": s["title"], "duration": s["duration"]} for s in tl["segments"] if s["kind"] == "video" and s.get("part", 0) == 0]
     return {"items": vids, "sync_status": ch.get("sync_status"), "last_sync": ch.get("last_sync"),
             "next_sync": ch.get("next_sync")}
 

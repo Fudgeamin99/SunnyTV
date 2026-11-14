@@ -100,7 +100,7 @@ class Runner:
                 log = open(os.path.join(LOG_DIR, f"{ch['number']}.log"), "ab")
                 try:
                     self.proc = subprocess.Popen(
-                        build_cmd(path, pos["offset"], rem, out),
+                        build_cmd(path, pos["segment"].get("src_start", 0.0) + pos["offset"], rem, out),
                         stdout=subprocess.DEVNULL, stderr=log)
                     while self.proc.poll() is None:
                         if self.stop_evt.is_set() or self._idle():
