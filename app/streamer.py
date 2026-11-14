@@ -28,19 +28,44 @@ def out_dir(ch_id):
     return os.path.join(HLS_DIR, ch_id)
 
 
+HWACCEL = os.environ.get("HWACCEL", "none").lower()                 # none | vaapi
+VAAPI_DEVICE = os.environ.get("VAAPI_DEVICE", "/dev/dri/renderD128")
+_hw_ok = {"v": HWACCEL == "vaapi" and os.path.exists(VAAPI_DEVICE)}
+if HWACCEL == "vaapi" and not _hw_ok["v"]:
+    print(f"HWACCEL=vaapi but {VAAPI_DEVICE} was not found: using CPU encoding. "
+          "Map /dev/dri into the container to use the GPU.", flush=True)
+
+
+def hw_active():
+    return _hw_ok["v"]
+
+
+def encoder_info():
+    return {"mode": "vaapi" if hw_active() else "cpu", "requested": HWACCEL,
+            "device": VAAPI_DEVICE, "device_found": os.path.exists(VAAPI_DEVICE)}
+
+
 def build_cmd(path, offset, remaining, out):
     w, h = RESOLUTION.split("x")
+    hw = hw_active()
     # Fix non-square pixels (DVD/VOB) and interlacing first, then fit into the frame.
     vf = ("scale=trunc(iw*sar/2)*2:ih,setsar=1,yadif=deint=interlaced,"
           f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p")
+          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,"
+          + ("format=nv12,hwupload" if hw else "format=yuv420p"))
+    if hw:   # decode on the CPU (works for every format), encode on the GPU
+        pre = ["-vaapi_device", VAAPI_DEVICE]
+        venc = ["-c:v", "h264_vaapi", "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE,
+                "-bufsize", "6000k", "-g", "60", "-bf", "0"]
+    else:
+        pre = []
+        venc = ["-c:v", "libx264", "-preset", PRESET,
+                "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE, "-bufsize", "6000k",
+                "-g", "60", "-keyint_min", "60", "-sc_threshold", "0"]
     return [
-        "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
+        "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin", *pre,
         "-re", "-ss", f"{offset:.3f}", "-i", path, "-t", f"{remaining:.3f}",
-        "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf,
-        "-c:v", "libx264", "-preset", PRESET,
-        "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE, "-bufsize", "6000k",
-        "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
+        "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf, *venc,
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-af", "aresample=async=1",
         "-f", "hls", "-hls_time", "2", "-hls_list_size", "10",
         "-hls_flags", "delete_segments+append_list+omit_endlist+discont_start",
@@ -121,6 +146,13 @@ class Runner:
                                 self.proc.terminate()   # ad settings changed: re-plan from the new schedule
                 finally:
                     log.close()
+                rc = self.proc.returncode
+                if (hw_active() and time.time() - started < 8 and rc not in (0, None, -15, -9)
+                        and not self.stop_evt.is_set()):
+                    _hw_ok["v"] = False
+                    print(f"GPU encoding failed (ffmpeg exit {rc}); switching to CPU encoding. "
+                          f"See data/logs/{ch['number']}.log", flush=True)
+                    continue
                 if time.time() - started < 2 and rem > 5:
                     self.stop_evt.wait(5)  # failing fast: do not spin
         finally:

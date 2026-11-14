@@ -2,6 +2,9 @@ FROM python:3.12-slim
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg ca-certificates tini \
+ && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+      apt-get install -y --no-install-recommends intel-media-va-driver i965-va-driver mesa-va-drivers vainfo; \
+    fi \
  && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp needs a JavaScript runtime to talk to YouTube reliably.

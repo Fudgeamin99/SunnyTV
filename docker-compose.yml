@@ -15,8 +15,12 @@ services:
       VIDEO_BITRATE: ${VIDEO_BITRATE:-3000k}
       X264_PRESET: ${X264_PRESET:-veryfast}
       IDLE_STOP_SECONDS: ${IDLE_STOP_SECONDS:-45}
+      HWACCEL: ${HWACCEL:-none}   # set to vaapi (and uncomment devices below) for GPU encoding
       # Only if the GitHub repo is private (for the Update button):
       # GITHUB_TOKEN: ghp_xxx
+    # Hardware (GPU) encoding on Intel/AMD: uncomment these two lines and set HWACCEL=vaapi in .env
+    # devices:
+    #   - /dev/dri:/dev/dri
     volumes:
       # Settings, downloaded YouTube videos, logs, app updates. Optional: cookies.txt goes here.
       - ${DATA_PATH:-./data}:/data

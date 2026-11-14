@@ -1,5 +1,5 @@
 # For a NAS (UGREEN UGOS, Synology, etc.): paste into the NAS's Docker "project" / compose screen.
-# Edit the three lines marked CHANGE, nothing else is needed.
+# Edit the lines marked CHANGE, nothing else is needed.
 services:
   sunny-tv:
     image: ghcr.io/fudgeamin99/sunnytv:latest
@@ -14,6 +14,10 @@ services:
       VIDEO_BITRATE: 3000k
       X264_PRESET: veryfast
       IDLE_STOP_SECONDS: 45
+      HWACCEL: vaapi          # encode on the NAS graphics chip (Intel/AMD). Use "none" for CPU only
+    devices:
+      - /dev/dri:/dev/dri     # gives the container the graphics chip. If the container will not start with
+                              # an error about /dev/dri, delete this line and set HWACCEL to none above
     volumes:
       - /volume1/docker/sunnytv/data:/data   # CHANGE to a folder on your NAS for settings and downloads
       - /volume1/Media:/media:ro             # CHANGE to the folder holding your own videos and ads

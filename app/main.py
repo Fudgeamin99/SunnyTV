@@ -100,7 +100,8 @@ def index():
 def info(request: Request):
     b = base_url(request)
     return {"base": b, "m3u": f"{b}/iptv/channels.m3u", "m3u_ts": f"{b}/iptv/channels.m3u?format=ts",
-            "xmltv": f"{b}/iptv/xmltv.xml", "hdhr": b.split("://", 1)[-1]}
+            "xmltv": f"{b}/iptv/xmltv.xml", "hdhr": b.split("://", 1)[-1],
+            "encoder": streamer.encoder_info()}
 
 
 # ---------- updates ----------

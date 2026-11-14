@@ -117,6 +117,22 @@ To build from source instead of pulling the image:
 - If you rebuild or pull a newer image, it automatically wins over an older in-app update.
 - If the repo is private, set `GITHUB_TOKEN` (a token with read access to the repo) in the compose environment.
 
+## Hardware transcoding (GPU encoding)
+
+Video is re-encoded so every item matches. By default that uses the CPU. On a NAS with an Intel (or AMD) graphics
+chip you can hand the encoding to the GPU, which uses far less CPU, handy for 1080p channels:
+
+1. Use `docker-compose.nas.yml` as is: it already sets `HWACCEL: vaapi` and maps `/dev/dri`. On other machines,
+   set `HWACCEL=vaapi` in `.env` and uncomment the two `devices` lines in `docker-compose.yml`.
+2. Redeploy the project, then check **Settings > Video encoding** in the app: it says whether the GPU is in use.
+
+Notes:
+- Only the encoding runs on the GPU. Decoding stays on the CPU so every file format keeps working.
+- If the GPU can't be used (no device, driver problem) the app falls back to the CPU by itself and says so in Settings.
+- If the container refuses to start with an error about `/dev/dri`, your NAS has no GPU to share: delete the
+  `devices` lines and set `HWACCEL: none`.
+- Intel and AMD only (VAAPI). Nvidia is not supported. The ARM image uses the CPU.
+
 ## How it works
 
 - Each channel is a looping timeline anchored at the moment you created it, so every viewer sees the same
