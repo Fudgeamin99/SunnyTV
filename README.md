@@ -28,6 +28,10 @@ cp .env.example .env        # set PUBLIC_URL to e.g. http://192.168.1.50:8484
 docker compose up -d
 ```
 
+Put your own videos and ad clips in `./media`. Settings and YouTube downloads are kept in `./data`.
+Both folders sit next to the compose file by default. To use other folders, set `MEDIA_PATH` and `DATA_PATH` in `.env`
+(for example `MEDIA_PATH=/mnt/tv/media`).
+
 To build from source instead of pulling the image:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`
 
@@ -63,10 +67,10 @@ To build from source instead of pulling the image:
 
 ## Folders
 
-| Path in the container | What |
-| --- | --- |
-| `/media` (read only) | Your videos and ad clips |
-| `/data` | Settings (`config.json`), YouTube downloads (`cache/`), logs (`logs/<channel>.log`), app updates (`code/`) |
+| Path in the container | On the host (default, or the NAS path you chose) | What |
+| --- | --- | --- |
+| `/media` (read only) | `./media` / `MEDIA_PATH` | Your videos and ad clips. Sub folders work, and the app never changes anything here |
+| `/data` | `./data` / `DATA_PATH` | Settings (`config.json`), YouTube downloads (`cache/`), logs (`logs/<channel>.log`), app updates (`code/`). Back this folder up to keep your channels and adverts |
 
 ## Good to know
 
