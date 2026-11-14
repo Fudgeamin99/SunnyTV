@@ -56,6 +56,40 @@ Put your own videos and ad clips in `./media`. Settings and YouTube downloads ar
 Both folders sit next to the compose file by default. To use other folders, set `MEDIA_PATH` and `DATA_PATH` in `.env`
 (for example `MEDIA_PATH=/mnt/tv/media`).
 
+The `docker-compose.yml` it uses:
+
+```yaml
+# Standard setup: pulls the prebuilt image from GitHub, nothing to build.
+# On a NAS, use docker-compose.nas.yml instead (absolute folder paths).
+services:
+  sunny-tv:
+    image: ghcr.io/fudgeamin99/sunnytv:latest
+    container_name: sunny-tv
+    restart: unless-stopped   # needed: the in-app Update button restarts the app by exiting it
+    ports:
+      - "${PORT:-8484}:8000"
+    environment:
+      TZ: ${TZ:-Europe/London}
+      # Address your TV/Plex/Jellyfin uses to reach this server (goes into the M3U and guide).
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      RESOLUTION: ${RESOLUTION:-1280x720}
+      VIDEO_BITRATE: ${VIDEO_BITRATE:-3000k}
+      X264_PRESET: ${X264_PRESET:-veryfast}
+      IDLE_STOP_SECONDS: ${IDLE_STOP_SECONDS:-45}
+      # Only if the GitHub repo is private (for the Update button):
+      # GITHUB_TOKEN: ghp_xxx
+    volumes:
+      # Settings, downloaded YouTube videos, logs, app updates. Optional: cookies.txt goes here.
+      - ${DATA_PATH:-./data}:/data
+      # Your own videos and advert clips (read only).
+      - ${MEDIA_PATH:-./media}:/media:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/info', timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+```
+
 To build from source instead of pulling the image:
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`
 
