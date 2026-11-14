@@ -60,14 +60,19 @@ MIN_TAIL = 60        # do not leave a final part shorter than this
 
 
 def _pod(ads, pod, ai):
-    """Ad segments filling about `pod` seconds. Returns (segments, next ad index)."""
+    """Ad segments filling exactly `pod` seconds (the last clip is cut short if needed).
+    Returns (segments, next ad index)."""
     out, filled, n = [], 0.0, 0
-    while filled < pod and n < 20:
+    while filled < pod - 0.5 and n < 60:
         a = ads[ai % len(ads)]
         ai += 1
         n += 1
-        out.append({**a, "kind": "ad", "part": 0, "src_start": 0.0})
-        filled += a["duration"]
+        left = pod - filled
+        if out and left < 3:
+            break                       # not worth a clip that short
+        d = min(a["duration"], left)
+        out.append({**a, "kind": "ad", "part": 0, "src_start": 0.0, "duration": d})
+        filled += d
     return out, ai
 
 
