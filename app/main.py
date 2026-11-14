@@ -305,6 +305,14 @@ def m3u(request: Request, format: str = "hls"):
     return PlainTextResponse("\n".join(lines) + "\n", media_type="audio/x-mpegurl")
 
 
+_BAD_XML = re.compile("[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\U00010000-\U0010FFFF]")
+
+
+def _x(text):
+    """Escape for XML and drop characters XML 1.0 does not allow (strict readers like Plex reject them)."""
+    return xesc(_BAD_XML.sub("", str(text)))
+
+
 def _xt(t):
     return datetime.fromtimestamp(t, timezone.utc).strftime("%Y%m%d%H%M%S +0000")
 
@@ -316,13 +324,13 @@ def xmltv(hours: int = 24):
     parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv generator-info-name="Sunny TV">']
     chans = sorted(cfg["channels"], key=lambda c: c["number"])
     for ch in chans:
-        parts.append(f'<channel id="sunnytv.{ch["number"]}"><display-name>{xesc(ch["name"])}</display-name>'
+        parts.append(f'<channel id="sunnytv.{ch["number"]}"><display-name>{_x(ch["name"])}</display-name>'
                      f'<display-name>{ch["number"]}</display-name></channel>')
     for ch in chans:
         tl = schedule.build_timeline(cfg, ch)
         for p in schedule.programmes(tl, ch, hours, t):
             parts.append(f'<programme start="{_xt(p["start"])}" stop="{_xt(p["stop"])}" '
-                         f'channel="sunnytv.{ch["number"]}"><title>{xesc(p["title"])}</title></programme>')
+                         f'channel="sunnytv.{ch["number"]}"><title>{_x(p["title"])}</title></programme>')
     parts.append("</tv>")
     return Response("\n".join(parts), media_type="application/xml")
 
