@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import media, schedule, store, streamer, updater, youtube
+from . import logos, media, schedule, store, streamer, updater, youtube
 
 PORT = int(os.environ.get("PORT", "8000"))
 HDHR_TUNERS = int(os.environ.get("HDHR_TUNERS", "4"))   # simultaneous streams Plex may open
@@ -87,7 +87,7 @@ def public(cfg, ch):
     vids = [s for s in tl["segments"] if s["kind"] == "video" and s.get("part", 0) == 0]
     out = {k: ch.get(k) for k in ("id", "number", "name", "source", "order", "ad_group_id",
                                   "ad_break_seconds", "sync_status", "last_sync")}
-    out.update({"enabled": ch.get("enabled", True), "always_on": ch.get("always_on", False),
+    out.update({"logo": logos.url_for(ch), "enabled": ch.get("enabled", True), "always_on": ch.get("always_on", False),
                 "ad_break_every": ch.get("ad_break_every", 15), "videos": len(vids), "now": now, "live": streamer.is_live(ch["id"])})
     return out
 
@@ -205,7 +205,7 @@ def set_flags(ch_id: str, body: FlagsIn):
             ch["always_on"] = body.always_on
         enabled, always = ch.get("enabled", True), ch.get("always_on", False)
     if not enabled:
-        streamer.stop(ch_id)
+        streamer.release(ch_id)      # a running stream switches to the "offline" slate and idles out
     elif always:
         streamer.ensure(ch_id, always=True)
     else:
@@ -220,7 +220,45 @@ def delete_channel(ch_id: str):
         cfg["channels"].remove(ch)
     streamer.stop(ch_id)
     youtube.remove_cache(ch_id)
+    logos.remove_files(ch_id)
     return {"ok": True}
+
+
+@app.post("/api/channels/{ch_id}/logo")
+async def upload_logo(ch_id: str, request: Request):
+    """The request body is the raw image file."""
+    get_channel_or_404(store.load(), ch_id)
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit() and int(cl) > logos.MAX_BYTES + 1024:
+        raise HTTPException(413, "That image is over 3 MB. Please use a smaller one")
+    data = await request.body()
+    try:
+        name, ver = logos.save(ch_id, data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with store.edit() as cfg:
+        ch = get_channel_or_404(cfg, ch_id)
+        ch["logo"], ch["logo_v"] = name, ver
+    return {"ok": True, "logo": f"/logo/{ch_id}?v={ver}"}
+
+
+@app.delete("/api/channels/{ch_id}/logo")
+def delete_logo(ch_id: str):
+    with store.edit() as cfg:
+        ch = get_channel_or_404(cfg, ch_id)
+        ch.pop("logo", None)
+        ch.pop("logo_v", None)
+    logos.remove_files(ch_id)
+    return {"ok": True}
+
+
+@app.get("/logo/{ch_id}")
+def get_logo(ch_id: str):
+    ch = store.find_channel(store.load(), ch_id)
+    p = logos.path_for(ch) if ch else None
+    if not p:
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.post("/api/channels/{ch_id}/sync")
@@ -337,7 +375,7 @@ def guide(hours: int = 168):
     chans = []
     for ch in sorted(_enabled(cfg), key=lambda c: c["number"]):
         tl = schedule.build_timeline(cfg, ch)
-        chans.append({"id": ch["id"], "number": ch["number"], "name": ch["name"],
+        chans.append({"id": ch["id"], "number": ch["number"], "name": ch["name"], "logo": logos.url_for(ch),
                       "programmes": schedule.programmes(tl, ch, hours, t)})
     return {"now": t, "channels": chans}
 
@@ -349,7 +387,8 @@ def m3u(request: Request, format: str = "hls"):
     for ch in sorted(_enabled(store.load()), key=lambda c: c["number"]):
         n = ch["number"]
         name = ch["name"].replace('"', "'")
-        lines.append(f'#EXTINF:-1 tvg-id="sunnytv.{n}" tvg-chno="{n}" tvg-name="{name}" '
+        logo = f' tvg-logo="{b}{logos.url_for(ch)}"' if logos.url_for(ch) else ""
+        lines.append(f'#EXTINF:-1 tvg-id="sunnytv.{n}" tvg-chno="{n}" tvg-name="{name}"{logo} '
                      f'group-title="Sunny TV",{ch["name"]}')
         lines.append(f"{b}/stream/{n}.ts" if format == "ts" else f"{b}/stream/{n}/index.m3u8")
     return PlainTextResponse("\n".join(lines) + "\n", media_type="audio/x-mpegurl")
@@ -409,15 +448,17 @@ def _xt(t):
 
 
 @app.get("/iptv/xmltv.xml")
-def xmltv(hours: int = 168):
+def xmltv(request: Request, hours: int = 168):
     hours = max(1, min(hours, 168))
+    b = base_url(request)
     cfg = store.load()
     t = time.time()
     parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv generator-info-name="Sunny TV">']
     chans = sorted(_enabled(cfg), key=lambda c: c["number"])
     for ch in chans:
+        icon = f'<icon src="{_x(b + logos.url_for(ch))}"/>' if logos.url_for(ch) else ""
         parts.append(f'<channel id="sunnytv.{ch["number"]}"><display-name>{_x(ch["name"])}</display-name>'
-                     f'<display-name>{ch["number"]}</display-name></channel>')
+                     f'<display-name>{ch["number"]}</display-name>{icon}</channel>')
     for ch in chans:
         tl = schedule.build_timeline(cfg, ch)
         for p in schedule.programmes(tl, ch, hours, t):
@@ -431,8 +472,8 @@ def xmltv(hours: int = 168):
 
 def _by_number(number):
     ch = store.find_channel_by_number(store.load(), number)
-    if not ch or not ch.get("enabled", True):
-        raise HTTPException(404, "no such channel (or it is turned off)")
+    if not ch:
+        raise HTTPException(404, "no such channel")
     return ch
 
 

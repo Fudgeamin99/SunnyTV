@@ -38,6 +38,9 @@ h2{margin:0;font-family:Fredoka,sans-serif;font-weight:500;font-size:19px}
 .sw input:focus-visible + .knob{outline:3px solid #1e3a5f;outline-offset:2px}
 .sw input:disabled{cursor:default}.sw input:disabled + .knob{opacity:.45}
 .row.off{opacity:.65}
+.logo{width:56px;height:40px;object-fit:contain;border-radius:8px;flex:none}
+.logo.ph{display:flex;align-items:center;justify-content:center;background:#e8f2fb;color:#35557a;font-weight:800;font-size:12px}
+.gl{width:30px;height:22px;object-fit:contain;margin-right:8px;flex:none}
 .tag.idle{border-color:#6a7f96;color:#4a6785;background:#eef3f8}
 .tag.err{border-color:#b3261e;color:#b3261e;background:#fdecea}
 .sub{color:#4a6785;font-size:13px;font-weight:600}
@@ -113,9 +116,9 @@ async function viewChannels() {
     const now = c.now ? (c.now.kind === 'ad' ? 'Ad break' : esc(c.now.title)) : (c.videos ? 'Starting...' : (c.source.type === 'youtube' ? esc(c.sync_status || 'waiting for sync') : 'No videos found yet'));
     const tag = !c.enabled ? ['idle', 'Off'] : c.live ? ['', c.always_on ? 'Live 24/7' : 'Live'] : c.always_on ? ['', 'Starting'] : ['idle', 'Idle'];
     const sw = (flag, label, on, tip, disabled) => `<label class="sw" title="${tip}"><input type="checkbox" role="switch" data-flag="${flag}" data-id="${c.id}" ${on ? 'checked' : ''} ${disabled ? 'disabled' : ''} aria-label="${label} for ${esc(c.name)}"><span class="knob"></span>${label}</label>`;
-    return `<div class="row ${c.enabled ? '' : 'off'}"><b style="width:36px">${c.number}</b><div class="grow"><b>${esc(c.name)}</b><div class="sub">Now: ${now}</div></div>
+    return `<div class="row ${c.enabled ? '' : 'off'}">${c.logo ? `<img class="logo" src="${c.logo}" alt="">` : `<span class="logo ph">${c.number}</span>`}<b style="width:36px">${c.number}</b><div class="grow"><b>${esc(c.name)}</b><div class="sub">Now: ${now}</div></div>
       <div class="sub" style="width:110px">${c.videos} videos</div><div class="sub" style="width:170px">Ads: ${esc(gname(c.ad_group_id))}</div>
-      ${sw('enabled', 'On', c.enabled, 'Turn this channel on or off. Off channels are hidden from Plex, the guide and the playlists.', false)}
+      ${sw('enabled', 'On', c.enabled, 'Turn this channel on or off. Off channels are hidden from the guide and the playlists and show an offline screen if someone tunes in.', false)}
       ${sw('always_on', '24/7', c.always_on, 'Keep this channel running all the time, even when nobody is watching.', !c.enabled)}
       <span class="tag ${tag[0]}" style="min-width:74px;text-align:center">${tag[1]}</span>
       <button class="btn" data-act="edit" data-id="${c.id}">Edit</button></div>`;
@@ -123,7 +126,7 @@ async function viewChannels() {
   const link = (label, url) => `<label class="lbl grow" style="min-width:260px">${label}<div style="display:flex;gap:8px"><input class="fld" readonly value="${esc(url)}"><button class="btn" data-act="copy" data-text="${esc(url)}">Copy</button></div></label>`;
   $('#main').innerHTML = `<div class="h"><h1>Channels</h1><button class="btn p" data-act="edit" data-id="new">New channel</button></div>${rows}
     <div class="card"><h2>Tuner links</h2><div class="cols">${link('M3U playlist (HLS)', info.m3u)}${link('M3U playlist (MPEG-TS, for Plex)', info.m3u_ts)}${link('XMLTV guide', info.xmltv)}${link('Plex / Jellyfin tuner address (add as an HDHomeRun device)', info.hdhr)}</div>
-    <div class="sub">Channels with 24/7 off only start encoding when someone tunes in, and stop shortly after the last viewer leaves. 24/7 channels encode all the time, which uses more of the NAS. Turning a channel Off hides it from Plex and the playlists (rescan the tuner in Plex to drop it there).</div></div>`;
+    <div class="sub">Channels with 24/7 off only start encoding when someone tunes in, and stop shortly after the last viewer leaves. 24/7 channels encode all the time, which uses more of the NAS. Turning a channel Off hides it from the guide and the playlists, and anyone who still tunes in sees the offline screen.</div></div>`;
   S.timer = setInterval(() => { if (S.view === 'channels') viewChannels(); }, 15000);
 }
 
@@ -141,6 +144,11 @@ async function viewEditor(id) {
   <div class="cols"><div class="card" style="width:340px">
     <label class="lbl">Channel number<input class="fld" id="f-number" type="number" min="1" value="${c.number}"></label>
     <label class="lbl">Name<input class="fld" id="f-name" value="${esc(c.name)}"></label>
+    <div class="lbl">Channel logo
+      <div style="display:flex;gap:12px;align-items:center;margin-top:6px"><img class="logo" id="logo-prev" style="width:84px;height:60px;border:2px solid #bcd9ee;background:#fff" ${c.logo ? `src="${c.logo}"` : 'hidden'} alt="">
+        <div><input type="file" id="f-logo" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        <button class="btn" type="button" data-act="logo-pick">Choose image</button> <button class="btn" type="button" data-act="logo-clear" id="logo-clear" ${c.logo ? '' : 'hidden'}>Remove</button></div></div>
+      <div class="sub" style="margin-top:6px">PNG, JPG, WEBP or GIF up to 3 MB. A transparent PNG looks best. Shown in the guide, in Plex and on the offline screen.</div></div>
     <label class="lbl">Playback order<select class="fld" id="f-order">${opt('sequential', 'Sequential', c.order)}${opt('shuffle', 'Shuffle (fixed order per channel)', c.order)}</select></label>
     <label class="lbl">Advert group<select class="fld" id="f-ad"><option value="">None</option>${groups.map(g => opt(g.id, esc(g.name), c.ad_group_id)).join('')}</select></label>
     <label class="lbl">Ad break every<select class="fld" id="f-every">${[[0, 'Only between videos'], [10, '10 minutes'], [15, '15 minutes'], [20, '20 minutes'], [30, '30 minutes']].map(([v, l]) => opt(v, l, c.ad_break_every ?? 15)).join('')}</select></label>
@@ -164,11 +172,15 @@ async function viewEditor(id) {
     <div class="h"><h2>Playlist</h2>${isNew ? '' : '<button class="btn" data-act="sync" data-id="' + c.id + '" id="sync-btn">Sync now</button>'}</div>
     <div id="pl" class="scroll"><div class="sub">${isNew ? 'Save the channel to see its playlist.' : 'Loading...'}</div></div>
   </div></div>`;
-  S.editNew = isNew; S.libFiles = null; S.groups = groups;
+  S.editNew = isNew; S.libFiles = null; S.groups = groups; S.pendingLogo = null; S.editId = isNew ? null : c.id;
   toggleSource();
   adHint();
   if (isNew) previewFolder();
   if (!isNew) { refreshPlaylist(c.id); S.timer = setInterval(() => refreshPlaylist(c.id), 4000); }
+}
+async function uploadLogo(id, file) {
+  const r = await fetch(`/api/channels/${id}/logo`, {method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: file});
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} throw new Error(m); }
 }
 function adHint() {
   const el = $('#ad-hint'); if (!el) return;
@@ -290,7 +302,7 @@ function guideGrid() {
       }).join('');
       return `<div class="blk ${now ? 'now' : ''}" title="${esc(p.title)} (${clock(p.start)} to ${clock(p.stop)})" style="left:${pct(a)}%;width:${(b - a) / W * 100}%"><span class="bt">${esc(p.title)}</span>${brk}</div>`;
     }).join('');
-    return `<div class="line"><div class="name" data-act="watch" data-num="${c.number}" data-name="${esc(c.name)}">${c.number} ${esc(c.name)}</div><div class="track">${blocks}</div></div>`;
+    return `<div class="line"><div class="name" data-act="watch" data-num="${c.number}" data-name="${esc(c.name)}">${c.logo ? `<img class="gl" src="${c.logo}" alt="">` : ''}${c.number} ${esc(c.name)}</div><div class="track">${blocks}</div></div>`;
   }).join('') || '<div class="sub">No channels yet.</div>';
   return `<div class="grid"><div class="line"><div class="sub" style="width:170px;flex:none;align-self:center">${dayLabel(t0)}</div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div>`;
 }
@@ -389,12 +401,20 @@ document.addEventListener('click', async e => {
     switch (d.act) {
       case 'edit': return go('editor', d.id);
       case 'cancel': return go('channels');
+      case 'logo-pick': return $('#f-logo').click();
+      case 'logo-clear': {
+        S.pendingLogo = null; $('#logo-prev').hidden = true; $('#logo-clear').hidden = true; $('#f-logo').value = '';
+        if (S.editNew) return;
+        await api('DELETE', `/api/channels/${S.editId}/logo`); return toast('Logo removed');
+      }
       case 'copy': await navigator.clipboard.writeText(d.text); return toast('Copied');
       case 'save': {
         const body = readForm();
         if (!body.name) return toast('Give the channel a name');
         if (body.source.type === 'youtube' && !body.source.url) return toast('Paste a YouTube channel URL');
-        if (d.id === 'new') await api('POST', '/api/channels', body); else await api('PUT', '/api/channels/' + d.id, body);
+        let cid = d.id;
+        if (d.id === 'new') cid = (await api('POST', '/api/channels', body)).id; else await api('PUT', '/api/channels/' + d.id, body);
+        if (S.pendingLogo) await uploadLogo(cid, S.pendingLogo);
         toast('Saved'); return go('channels');
       }
       case 'delete': if (!confirm('Delete this channel and its downloaded videos?')) return; await api('DELETE', '/api/channels/' + d.id); return go('channels');
@@ -445,6 +465,14 @@ document.addEventListener('change', async e => {
     try { await api('PUT', `/api/channels/${e.target.dataset.id}/flags`, {[flag]: e.target.checked}); }
     catch (err) { toast(err.message); }
     return viewChannels();
+  }
+  if (e.target.id === 'f-logo') {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 3 * 1024 * 1024) { e.target.value = ''; return toast('That image is over 3 MB'); }
+    $('#logo-prev').src = URL.createObjectURL(f); $('#logo-prev').hidden = false; $('#logo-clear').hidden = false;
+    if (S.editNew) { S.pendingLogo = f; return toast('Logo will be saved with the channel'); }
+    try { await uploadLogo(S.editId, f); toast('Logo saved'); } catch (err) { toast(err.message); }
+    return;
   }
   if (e.target.id === 'f-type') { toggleSource(); previewFolder(); }
   if (e.target.id === 'g-win') { G.win = parseInt(e.target.value, 10); renderGuide(); }

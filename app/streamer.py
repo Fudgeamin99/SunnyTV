@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 
-from . import schedule, store
+from . import logos, schedule, store
 
 HLS_DIR = os.path.join(store.DATA_DIR, "hls")
 LOG_DIR = os.path.join(store.DATA_DIR, "logs")
@@ -52,6 +52,49 @@ def _sub_filter(subs, offset):
     style = "FontName=DejaVu Sans,FontSize=18,Bold=1,Outline=2,Shadow=0,MarginV=24"
     return (f"setpts=PTS+{offset:.3f}/TB,subtitles=filename='{esc}':force_style='{style}',"
             "setpts=PTS-STARTPTS,")
+
+
+SLATE = os.path.join(os.path.dirname(__file__), "static", "offline.png")
+SLATE_SECONDS = 20
+
+
+def _encode_args():
+    """(input options, video encoder options) for the current encoder."""
+    if hw_active():   # decode on the CPU (works for every format), encode on the GPU
+        return (["-vaapi_device", VAAPI_DEVICE],
+                ["-c:v", "h264_vaapi", "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE,
+                 "-bufsize", "6000k", "-g", "60", "-bf", "0"])
+    return ([], ["-c:v", "libx264", "-preset", PRESET,
+                 "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE, "-bufsize", "6000k",
+                 "-g", "60", "-keyint_min", "60", "-sc_threshold", "0"])
+
+
+def build_slate_cmd(out, logo=None, secs=SLATE_SECONDS):
+    """The "offline" picture (with the channel's logo on top, if it has one) as a live stream."""
+    w, h = RESOLUTION.split("x")
+    w, h = int(w), int(h)
+    pre, venc = _encode_args()
+    tail = "format=nv12,hwupload" if hw_active() else "format=yuv420p"
+    ins = ["-re", "-loop", "1", "-framerate", "30", "-t", str(secs), "-i", SLATE]
+    bg = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+    if logo:
+        ins += ["-loop", "1", "-framerate", "30", "-t", str(secs), "-i", logo]
+        fc = (f"[0:v]{bg}[bg];[1:v]scale={int(w * 0.3) // 2 * 2}:{int(h * 0.115) // 2 * 2}"
+              f":force_original_aspect_ratio=decrease,format=rgba[lg];"
+              f"[bg][lg]overlay=(W-w)/2:{int(h * 0.05)}:format=auto,fps=30,{tail}[v]")
+        vmap, aidx = ["-filter_complex", fc, "-map", "[v]"], 2
+    else:
+        vmap, aidx = ["-vf", f"{bg},fps=30,{tail}", "-map", "0:v:0"], 1
+    ins += ["-f", "lavfi", "-t", str(secs), "-i", "anullsrc=r=48000:cl=stereo"]
+    return [
+        "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin", *pre, *ins,
+        *vmap, "-map", f"{aidx}:a:0", *venc,
+        "-c:a", "aac", "-b:a", "64k", "-ar", "48000", "-ac", "2",
+        "-f", "hls", "-hls_time", "2", "-hls_list_size", "10",
+        "-hls_flags", "delete_segments+append_list+omit_endlist+discont_start",
+        "-hls_segment_filename", os.path.join(out, "seg_%06d.ts"),
+        os.path.join(out, "index.m3u8"),
+    ]
 
 
 def build_cmd(path, offset, remaining, out, subs=None):
@@ -109,6 +152,45 @@ class Runner:
     def _idle(self):
         return (not self.always) and time.time() - self.last_hit > IDLE
 
+    def _playable(self):
+        """Is the channel on, with something scheduled? (re-read from the config)"""
+        ch = store.find_channel(store.load(), self.ch_id)
+        if not ch or not ch.get("enabled", True):
+            return False
+        return bool(schedule.position(schedule.build_timeline(store.load(), ch), ch))
+
+    def _slate(self, ch, out):
+        """Play the "offline" picture for a short stretch, then let the main loop re-check."""
+        os.makedirs(LOG_DIR, exist_ok=True)
+        log = open(os.path.join(LOG_DIR, f"{ch['number']}.log"), "ab")
+        started, last_check = time.time(), time.time()
+        try:
+            self.proc = subprocess.Popen(build_slate_cmd(out, logos.path_for(ch)),
+                                         stdout=subprocess.DEVNULL, stderr=log)
+            while self.proc.poll() is None:
+                if self.stop_evt.is_set() or self._idle():
+                    self.proc.terminate()
+                    try:
+                        self.proc.wait(5)
+                    except subprocess.TimeoutExpired:
+                        self.proc.kill()
+                    break
+                time.sleep(0.5)
+                if time.time() - last_check > 3:
+                    last_check = time.time()
+                    if self._playable():
+                        self.proc.terminate()   # switched back on / playlist ready: go to the real thing
+                        break
+        finally:
+            log.close()
+        rc = self.proc.returncode
+        if (hw_active() and time.time() - started < 8 and rc not in (0, None, -15, -9)
+                and not self.stop_evt.is_set()):
+            _hw_ok["v"] = False
+            print(f"GPU encoding failed (ffmpeg exit {rc}); switching to CPU encoding.", flush=True)
+        elif time.time() - started < 2:
+            self.stop_evt.wait(3)       # failing fast: do not spin
+
     def _run(self):
         out = out_dir(self.ch_id)
         shutil.rmtree(out, ignore_errors=True)
@@ -121,9 +203,9 @@ class Runner:
                 if not ch:
                     break
                 tl = schedule.build_timeline(cfg, ch)
-                pos = schedule.position(tl, ch)
+                pos = schedule.position(tl, ch) if ch.get("enabled", True) else None
                 if not pos:
-                    self.stop_evt.wait(5)
+                    self._slate(ch, out)     # switched off, or nothing to play yet: show the offline picture
                     continue
                 rem = pos["remaining"]
                 if rem < 1.0:
@@ -204,8 +286,8 @@ def keepalive_once():
     for ch in cfg["channels"]:
         r = _runners.get(ch["id"])
         if not ch.get("enabled", True):
-            if r and r.alive():
-                stop(ch["id"])
+            if r and r.alive() and r.always:
+                release(ch["id"])       # keep the offline slate only while someone is watching
         elif ch.get("always_on", False):
             ensure(ch["id"], always=True)
         elif r and r.alive() and r.always:

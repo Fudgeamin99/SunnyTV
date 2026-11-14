@@ -16,6 +16,7 @@ just like real TV. Add it to **Plex, Jellyfin, Emby, VLC or Kodi** and flick thr
   M3U playlists are there too for VLC, Kodi and others.
 - **Switches on every channel:** turn a channel **On/Off**, or keep it running **24/7** so it is always ready
   instead of starting when someone tunes in.
+- **Channel logos and an offline screen:** give each channel a logo (shown in the guide, in Plex and on the offline screen). A channel that is switched off, or has nothing to play yet, shows a "Currently offline" screen instead of an error.
 - **Hardware transcoding:** use your NAS graphics chip (Intel/AMD) to keep the CPU free.
 - **One-click updates:** an Update button in the app pulls the latest version from GitHub.
 - **Runs in Docker:** one image, one compose file. Made for NAS boxes such as UGREEN, and works anywhere Docker does.
