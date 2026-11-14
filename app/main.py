@@ -93,7 +93,15 @@ def public(cfg, ch):
 
 
 def _enabled(cfg):
-    return [c for c in cfg["channels"] if c.get("enabled", True)]
+    """Channels to list in the guide, playlists and tuner lineup. Switched-off channels stay listed
+    (so Plex and IPTV apps keep a stable channel list) and show the offline screen when tuned."""
+    return list(cfg["channels"])
+
+
+def _programmes(cfg, ch, hours, t):
+    if not ch.get("enabled", True):
+        return [{"title": "Off air", "start": t - 1800, "stop": t + hours * 3600, "ad": False, "breaks": []}]
+    return schedule.programmes(schedule.build_timeline(cfg, ch), ch, hours, t)
 
 
 def get_channel_or_404(cfg, ch_id):
@@ -374,9 +382,8 @@ def guide(hours: int = 168):
     t = time.time()
     chans = []
     for ch in sorted(_enabled(cfg), key=lambda c: c["number"]):
-        tl = schedule.build_timeline(cfg, ch)
         chans.append({"id": ch["id"], "number": ch["number"], "name": ch["name"], "logo": logos.url_for(ch),
-                      "programmes": schedule.programmes(tl, ch, hours, t)})
+                      "enabled": ch.get("enabled", True), "programmes": _programmes(cfg, ch, hours, t)})
     return {"now": t, "channels": chans}
 
 
@@ -460,8 +467,7 @@ def xmltv(request: Request, hours: int = 168):
         parts.append(f'<channel id="sunnytv.{ch["number"]}"><display-name>{_x(ch["name"])}</display-name>'
                      f'<display-name>{ch["number"]}</display-name>{icon}</channel>')
     for ch in chans:
-        tl = schedule.build_timeline(cfg, ch)
-        for p in schedule.programmes(tl, ch, hours, t):
+        for p in _programmes(cfg, ch, hours, t):
             parts.append(f'<programme start="{_xt(p["start"])}" stop="{_xt(p["stop"])}" '
                          f'channel="sunnytv.{ch["number"]}"><title>{_x(p["title"])}</title></programme>')
     parts.append("</tv>")
@@ -482,7 +488,7 @@ async def hls_file(number: int, filename: str):
     if not re.fullmatch(r"index\.m3u8|seg_\d{6}\.ts", filename):
         raise HTTPException(404)
     ch = _by_number(number)
-    streamer.ensure(ch["id"], always=bool(ch.get("always_on")))
+    streamer.ensure(ch["id"], always=bool(ch.get("always_on")) and ch.get("enabled", True))
     if filename == "index.m3u8":
         if not await streamer.wait_ready(ch["id"]):
             raise HTTPException(503, "This channel has nothing to play yet")
@@ -497,7 +503,7 @@ async def hls_file(number: int, filename: str):
 async def stream_ts(number: int):
     """Continuous MPEG-TS, for players (like Plex) that prefer it over HLS."""
     ch = _by_number(number)
-    runner = streamer.ensure(ch["id"], always=bool(ch.get("always_on")))
+    runner = streamer.ensure(ch["id"], always=bool(ch.get("always_on")) and ch.get("enabled", True))
     if not await streamer.wait_ready(ch["id"]):
         raise HTTPException(503, "This channel has nothing to play yet")
     proc = await asyncio.create_subprocess_exec(

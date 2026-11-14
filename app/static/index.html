@@ -118,7 +118,7 @@ async function viewChannels() {
     const sw = (flag, label, on, tip, disabled) => `<label class="sw" title="${tip}"><input type="checkbox" role="switch" data-flag="${flag}" data-id="${c.id}" ${on ? 'checked' : ''} ${disabled ? 'disabled' : ''} aria-label="${label} for ${esc(c.name)}"><span class="knob"></span>${label}</label>`;
     return `<div class="row ${c.enabled ? '' : 'off'}">${c.logo ? `<img class="logo" src="${c.logo}" alt="">` : `<span class="logo ph">${c.number}</span>`}<b style="width:36px">${c.number}</b><div class="grow"><b>${esc(c.name)}</b><div class="sub">Now: ${now}</div></div>
       <div class="sub" style="width:110px">${c.videos} videos</div><div class="sub" style="width:170px">Ads: ${esc(gname(c.ad_group_id))}</div>
-      ${sw('enabled', 'On', c.enabled, 'Turn this channel on or off. Off channels are hidden from the guide and the playlists and show an offline screen if someone tunes in.', false)}
+      ${sw('enabled', 'On', c.enabled, 'Turn this channel on or off. Off channels stay in the guide, Plex and the playlists, but show an offline screen if someone tunes in.', false)}
       ${sw('always_on', '24/7', c.always_on, 'Keep this channel running all the time, even when nobody is watching.', !c.enabled)}
       <span class="tag ${tag[0]}" style="min-width:74px;text-align:center">${tag[1]}</span>
       <button class="btn" data-act="edit" data-id="${c.id}">Edit</button></div>`;
@@ -126,7 +126,7 @@ async function viewChannels() {
   const link = (label, url) => `<label class="lbl grow" style="min-width:260px">${label}<div style="display:flex;gap:8px"><input class="fld" readonly value="${esc(url)}"><button class="btn" data-act="copy" data-text="${esc(url)}">Copy</button></div></label>`;
   $('#main').innerHTML = `<div class="h"><h1>Channels</h1><button class="btn p" data-act="edit" data-id="new">New channel</button></div>${rows}
     <div class="card"><h2>Tuner links</h2><div class="cols">${link('M3U playlist (HLS)', info.m3u)}${link('M3U playlist (MPEG-TS, for Plex)', info.m3u_ts)}${link('XMLTV guide', info.xmltv)}${link('Plex / Jellyfin tuner address (add as an HDHomeRun device)', info.hdhr)}</div>
-    <div class="sub">Channels with 24/7 off only start encoding when someone tunes in, and stop shortly after the last viewer leaves. 24/7 channels encode all the time, which uses more of the NAS. Turning a channel Off hides it from the guide and the playlists, and anyone who still tunes in sees the offline screen.</div></div>`;
+    <div class="sub">Channels with 24/7 off only start encoding when someone tunes in, and stop shortly after the last viewer leaves. 24/7 channels encode all the time, which uses more of the NAS. Turning a channel Off keeps it listed in Plex, the guide and the playlists, so nothing needs rescanning, and anyone who tunes in sees the offline screen.</div></div>`;
   S.timer = setInterval(() => { if (S.view === 'channels') viewChannels(); }, 15000);
 }
 
