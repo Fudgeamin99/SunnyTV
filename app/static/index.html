@@ -107,7 +107,7 @@ async function viewChannels() {
   }).join('') || '<div class="sub">No channels yet. Create one to get started.</div>';
   const link = (label, url) => `<label class="lbl grow" style="min-width:260px">${label}<div style="display:flex;gap:8px"><input class="fld" readonly value="${esc(url)}"><button class="btn" data-act="copy" data-text="${esc(url)}">Copy</button></div></label>`;
   $('#main').innerHTML = `<div class="h"><h1>Channels</h1><button class="btn p" data-act="edit" data-id="new">New channel</button></div>${rows}
-    <div class="card"><h2>Tuner links</h2><div class="cols">${link('M3U playlist (HLS)', info.m3u)}${link('M3U playlist (MPEG-TS, for Plex)', info.m3u_ts)}${link('XMLTV guide', info.xmltv)}</div>
+    <div class="card"><h2>Tuner links</h2><div class="cols">${link('M3U playlist (HLS)', info.m3u)}${link('M3U playlist (MPEG-TS, for Plex)', info.m3u_ts)}${link('XMLTV guide', info.xmltv)}${link('Plex / Jellyfin tuner address (add as an HDHomeRun device)', info.hdhr)}</div>
     <div class="sub">Channels only start encoding when someone tunes in, and stop shortly after the last viewer leaves.</div></div>`;
   S.timer = setInterval(() => { if (S.view === 'channels') viewChannels(); }, 15000);
 }

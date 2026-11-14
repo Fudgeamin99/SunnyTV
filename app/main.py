@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 from . import media, schedule, store, streamer, updater, youtube
 
 PORT = int(os.environ.get("PORT", "8000"))
+HDHR_TUNERS = int(os.environ.get("HDHR_TUNERS", "4"))   # simultaneous streams Plex may open
+HDHR_ID = "A1B2C3D4"
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
 
@@ -98,7 +100,7 @@ def index():
 def info(request: Request):
     b = base_url(request)
     return {"base": b, "m3u": f"{b}/iptv/channels.m3u", "m3u_ts": f"{b}/iptv/channels.m3u?format=ts",
-            "xmltv": f"{b}/iptv/xmltv.xml"}
+            "xmltv": f"{b}/iptv/xmltv.xml", "hdhr": b.split("://", 1)[-1]}
 
 
 # ---------- updates ----------
@@ -311,6 +313,47 @@ _BAD_XML = re.compile("[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\U00010000-
 def _x(text):
     """Escape for XML and drop characters XML 1.0 does not allow (strict readers like Plex reject them)."""
     return xesc(_BAD_XML.sub("", str(text)))
+
+
+# ---------- HDHomeRun emulation, so Plex/Jellyfin/Emby can add this as a network tuner ----------
+
+@app.get("/discover.json")
+def hdhr_discover(request: Request):
+    b = base_url(request)
+    return {"FriendlyName": "Sunny TV", "Manufacturer": "Silicondust", "ModelNumber": "HDTC-2US",
+            "FirmwareName": "hdhomeruntc_atsc", "FirmwareVersion": "20200101", "TunerCount": HDHR_TUNERS,
+            "DeviceID": HDHR_ID, "DeviceAuth": "sunnytv", "BaseURL": b, "LineupURL": f"{b}/lineup.json"}
+
+
+@app.get("/lineup_status.json")
+def hdhr_status():
+    return {"ScanInProgress": 0, "ScanPossible": 1, "Source": "Cable", "SourceList": ["Cable"]}
+
+
+@app.get("/lineup.json")
+def hdhr_lineup(request: Request):
+    b = base_url(request)
+    return [{"GuideNumber": str(c["number"]), "GuideName": c["name"], "HD": 1,
+             "URL": f"{b}/stream/{c['number']}.ts"}
+            for c in sorted(store.load()["channels"], key=lambda c: c["number"])]
+
+
+@app.post("/lineup.post")
+def hdhr_scan():
+    return PlainTextResponse("")
+
+
+@app.get("/device.xml")
+def hdhr_device(request: Request):
+    b = base_url(request)
+    return Response(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<root xmlns="urn:schemas-upnp-org:device-1-0"><specVersion><major>1</major><minor>0</minor></specVersion>'
+        f'<URLBase>{b}</URLBase><device><deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>'
+        '<friendlyName>Sunny TV</friendlyName><manufacturer>Silicondust</manufacturer>'
+        '<modelName>HDTC-2US</modelName><modelNumber>HDTC-2US</modelNumber>'
+        f'<serialNumber>{HDHR_ID}</serialNumber><UDN>uuid:{HDHR_ID}-sunnytv</UDN></device></root>',
+        media_type="application/xml")
 
 
 def _xt(t):

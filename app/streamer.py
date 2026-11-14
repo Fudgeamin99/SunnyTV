@@ -42,7 +42,7 @@ def build_cmd(path, offset, remaining, out):
         "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE, "-bufsize", "6000k",
         "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-af", "aresample=async=1",
-        "-f", "hls", "-hls_time", "4", "-hls_list_size", "8",
+        "-f", "hls", "-hls_time", "2", "-hls_list_size", "10",
         "-hls_flags", "delete_segments+append_list+omit_endlist+discont_start",
         "-hls_segment_filename", os.path.join(out, "seg_%06d.ts"),
         os.path.join(out, "index.m3u8"),

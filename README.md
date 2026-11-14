@@ -100,7 +100,12 @@ To build from source instead of pulling the image:
 3. Copy the tuner links from the Channels page into your player.
 
 - **VLC / Kodi / Jellyfin / Emby:** add the *M3U playlist (HLS)* and the *XMLTV guide* URLs.
-- **Plex (Live TV & DVR):** use a third-party M3U tuner bridge, and give it the *MPEG-TS* playlist (`/iptv/channels.m3u?format=ts`).
+- **Plex (Live TV & DVR):** Sunny TV acts as a network tuner (it speaks the HDHomeRun protocol), so no bridge is needed.
+  In Plex go to *Settings > Live TV & DVR > Set up Plex DVR*, choose *Enter device address manually*, and type the
+  tuner address shown on the Channels page (for example `192.168.1.50:8484`, no `http://`). Plex finds your channels.
+  When it asks for a guide, choose *Use an XMLTV guide* and paste the XMLTV link **including `http://`**,
+  then match each Plex channel to the same-named guide entry. Plex needs a plan that includes Live TV & DVR.
+- **Jellyfin / Emby:** add a *HDHomeRun* tuner with the same address, or use the M3U and XMLTV links.
 
 ## Updating
 
