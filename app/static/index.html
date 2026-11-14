@@ -232,8 +232,7 @@ function renderAdverts() {
 }
 
 /* ---------- Guide ---------- */
-async function viewGuide() {
-  const g = await api('GET', '/api/guide?hours=6');
+function guideGrid(g) {
   const W = 6 * 3600, t0 = Math.floor(g.now / 1800) * 1800, t1 = t0 + W + 1800;
   const span = t1 - t0, pct = t => ((t - t0) / span * 100);
   let ticks = '';
@@ -247,10 +246,27 @@ async function viewGuide() {
     }).join('');
     return `<div class="line"><div class="name" data-act="watch" data-num="${c.number}" data-name="${esc(c.name)}">${c.number} ${esc(c.name)}</div><div class="track">${blocks}</div></div>`;
   }).join('') || '<div class="sub">No channels yet.</div>';
-  $('#main').innerHTML = `<div class="h"><h1>Guide</h1><span class="sub">Click a channel name to watch</span></div>
-    <div class="card"><div class="h"><h2 id="pv-title">Preview</h2><span class="sub">The stream can take about 10 seconds to start</span></div><video id="pv" controls muted playsinline></video></div>
-    <div class="gridwrap"><div class="grid"><div class="line"><div style="width:170px;flex:none"></div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div></div>`;
-  S.timer = setInterval(() => { if (S.view === 'guide' && !$('#pv').currentTime) viewGuide(); }, 60000);
+  return `<div class="grid"><div class="line"><div style="width:170px;flex:none"></div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div>`;
+}
+function setGuideUpdated(t) { const e = $('#g-updated'); if (e) e.textContent = 'Updated ' + clock(t); }
+async function refreshGuide(quiet) {
+  const btn = $('#g-refresh');
+  if (btn && !quiet) btn.disabled = true;
+  try {
+    const g = await api('GET', '/api/guide?hours=6');
+    const el = $('#guide-grid');
+    if (el) { el.innerHTML = guideGrid(g); setGuideUpdated(g.now); }
+    if (!quiet) toast('Guide refreshed');
+  } catch (e) { if (!quiet) toast(e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+async function viewGuide() {
+  const g = await api('GET', '/api/guide?hours=6');
+  $('#main').innerHTML = `<div class="h"><h1>Guide</h1><div class="cols" style="gap:12px;align-items:center"><span class="sub" id="g-updated"></span><button class="btn" data-act="guide-refresh" id="g-refresh">Refresh guide</button></div></div>
+    <div class="card"><div class="h"><h2 id="pv-title">Preview</h2><span class="sub">Click a channel name below to watch. The stream can take about 10 seconds to start</span></div><video id="pv" controls muted playsinline></video></div>
+    <div class="gridwrap" id="guide-grid">${guideGrid(g)}</div>`;
+  setGuideUpdated(g.now);
+  S.timer = setInterval(() => { if (S.view === 'guide') refreshGuide(true); }, 60000);
 }
 function watch(num, name) {
   const v = $('#pv'), url = `/stream/${num}/index.m3u8`;
@@ -321,6 +337,7 @@ document.addEventListener('click', async e => {
         try { await api('POST', '/api/update/apply'); } catch (err) { el.disabled = false; $('#upd-msg').textContent = err.message; return; }
         return waitForRestart();
       }
+      case 'guide-refresh': return refreshGuide(false);
       case 'lib': return go('library', d.path);
       case 'watch': return watch(d.num, d.name);
       case 'pick-group': return pickGroup(d.id);
