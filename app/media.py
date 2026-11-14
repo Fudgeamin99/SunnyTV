@@ -9,8 +9,69 @@ from . import store
 
 MEDIA_DIR = os.environ.get("MEDIA_DIR", "/media")
 CACHE_DIR = os.path.join(store.DATA_DIR, "cache")
-VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".ts", ".wmv", ".flv", ".mpg", ".mpeg",
-             ".vob", ".m2ts", ".mts", ".3gp", ".ogv", ".divx"}
+VIDEO_EXT = {
+    ".mp4",
+    ".m4v",
+    ".mkv",
+    ".mk3d",
+    ".webm",
+    ".avi",
+    ".divx",
+    ".xvid",
+    ".mov",
+    ".qt",
+    ".wmv",
+    ".asf",
+    ".flv",
+    ".f4v",
+    ".mpg",
+    ".mpeg",
+    ".mpe",
+    ".m1v",
+    ".m2v",
+    ".mpv",
+    ".vob",
+    ".m2ts",
+    ".mts",
+    ".ts",
+    ".tp",
+    ".trp",
+    ".3gp",
+    ".3g2",
+    ".ogv",
+    ".ogm",
+    ".rm",
+    ".rmvb",
+    ".mxf",
+    ".dv",
+    ".nsv",
+    ".wtv",
+    ".dvr-ms",
+    ".amv",
+    ".mod",
+    ".tod",
+    ".vro",
+    ".rec",
+    ".mjpg",
+    ".mjpeg",
+    ".y4m",
+    ".gxf",
+    ".nut",
+    ".h264",
+    ".h265",
+    ".hevc",
+    ".264",
+    ".265",
+    ".av1",
+    ".ivf",
+    ".vp9",
+    ".swf",
+    ".mp4v",
+    ".mj2",
+    ".bik",
+    ".smk",
+    ".roq",
+}
 
 _dur_path = os.path.join(store.DATA_DIR, "durations.json")
 _dur = {}
@@ -72,12 +133,22 @@ def _key(path):
 
 
 def _ffprobe(path):
+    """Duration in seconds. Tries the container first, then the streams (some formats only have one)."""
     try:
         p = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
-            capture_output=True, text=True, timeout=60,
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=duration",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=90,
         )
-        return float(p.stdout.strip().splitlines()[0])
+        vals = []
+        for tok in p.stdout.replace(",", "\n").split():
+            try:
+                v = float(tok)
+                if v > 0:
+                    vals.append(v)
+            except ValueError:
+                pass
+        return max(vals) if vals else 0.0
     except Exception:
         return 0.0
 
