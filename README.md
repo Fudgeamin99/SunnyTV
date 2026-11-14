@@ -1,8 +1,24 @@
 # Sunny TV
 
-A small self-hosted IPTV server. It turns a YouTube channel (or a folder of videos) into a
-live TV channel that loops forever, optionally with advert breaks, and publishes an M3U
-playlist and XMLTV guide for Plex, Jellyfin, Emby, VLC or Kodi.
+A self-hosted live TV server for your home. It turns a **YouTube channel** or your **own videos** into
+always-on TV channels that loop on a schedule, so everyone watching sees the same thing at the same time,
+just like real TV. Add it to **Plex, Jellyfin, Emby, VLC or Kodi** and flick through channels.
+
+## What it does
+
+- **YouTube channels:** point it at a channel and it keeps the latest 10, 15 or any number of videos downloaded
+  (with yt-dlp) and looping. New uploads join automatically, old ones drop off.
+- **Your own videos:** play a folder from your NAS as a channel. Handles almost every format, including DVD `.VOB`.
+- **Adverts:** build advert groups and apply them to channels. Breaks play every 15 minutes (you choose) and
+  after each video, for as long as you like.
+- **7-day guide:** a TV guide in the app (with ad breaks marked) and as an XMLTV file for your player.
+- **Plex-ready:** it appears to Plex as a network tuner (HDHomeRun), so there is no bridge or extra software.
+  M3U playlists are there too for VLC, Kodi and others.
+- **Switches on every channel:** turn a channel **On/Off**, or keep it running **24/7** so it is always ready
+  instead of starting when someone tunes in.
+- **Hardware transcoding:** use your NAS graphics chip (Intel/AMD) to keep the CPU free.
+- **One-click updates:** an Update button in the app pulls the latest version from GitHub.
+- **Runs in Docker:** one image, one compose file. Made for NAS boxes such as UGREEN, and works anywhere Docker does.
 
 ## Run it on a NAS (UGREEN, Synology, etc.)
 
