@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg ca-certificates tini \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates tini fonts-dejavu-core \
  && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
       apt-get install -y --no-install-recommends intel-media-va-driver i965-va-driver mesa-va-drivers vainfo; \
     fi \

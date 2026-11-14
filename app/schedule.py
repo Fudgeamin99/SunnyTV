@@ -20,7 +20,10 @@ def channel_videos(ch):
     if src.get("type") == "youtube":
         for it in ch.get("yt_items", []):
             if it.get("duration") and os.path.exists(it["path"]):
-                out.append({"path": it["path"], "title": it["title"], "duration": float(it["duration"])})
+                v = {"path": it["path"], "title": it["title"], "duration": float(it["duration"])}
+                if src.get("subtitles") and it.get("subs") and os.path.exists(it["subs"]):
+                    v["subs"] = it["subs"]
+                out.append(v)
     else:
         try:
             rels = media.list_files(src.get("folder", ""))

@@ -131,7 +131,7 @@ async function viewChannels() {
 async function viewEditor(id) {
   const isNew = id === 'new';
   const [groups, dirs, chs] = await Promise.all([api('GET', '/api/ad-groups'), api('GET', '/api/library/dirs'), api('GET', '/api/channels')]);
-  const c = isNew ? {number: Math.max(0, ...chs.map(x => x.number)) + 1, name: '', source: {type: 'youtube', folder: '', url: '', keep: 15, refresh_hours: 6, quality: 1080}, order: 'sequential', ad_group_id: null, ad_break_seconds: 60, ad_break_every: 15} : chs.find(x => x.id === id);
+  const c = isNew ? {number: Math.max(0, ...chs.map(x => x.number)) + 1, name: '', source: {type: 'youtube', folder: '', url: '', keep: 15, refresh_hours: 6, quality: 1080, subtitles: false, sub_lang: 'en'}, order: 'sequential', ad_group_id: null, ad_break_seconds: 60, ad_break_every: 15} : chs.find(x => x.id === id);
   if (!c) throw new Error('Channel not found');
   const s = c.source;
   const opt = (v, label, cur) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${label}</option>`;
@@ -154,6 +154,9 @@ async function viewEditor(id) {
       <label class="lbl grow" style="min-width:110px">Keep latest<input class="fld" id="f-keep" type="number" min="1" max="100" value="${s.keep}"></label>
       <label class="lbl grow" style="min-width:130px">Refresh every<select class="fld" id="f-refresh">${[[1, '1 hour'], [6, '6 hours'], [24, '24 hours']].map(([v, l]) => opt(v, l, s.refresh_hours)).join('')}</select></label>
       <label class="lbl grow" style="min-width:110px">Max quality<select class="fld" id="f-quality">${[480, 720, 1080, 1440].map(v => opt(v, v + 'p', s.quality)).join('')}</select></label>
+      <label class="lbl grow" style="min-width:150px">Subtitles<select class="fld" id="f-subs">${opt('0', 'Off', s.subtitles ? '1' : '0')}${opt('1', 'On (burned into the picture)', s.subtitles ? '1' : '0')}</select></label>
+      <label class="lbl grow" style="min-width:110px">Language<input class="fld" id="f-sublang" maxlength="12" value="${esc(s.sub_lang || 'en')}" placeholder="en"></label>
+      <div class="sub" style="width:100%">Subtitles use the video's own captions when it has them, otherwise YouTube's automatic ones. Videos without any play without subtitles.</div>
       <div class="sub" style="width:100%">Downloaded with yt-dlp. Older videos drop off the loop. Use only content you own or have permission to broadcast.</div>
     </div>
     <div id="src-folder"><label class="lbl">Which videos<select class="fld" id="f-folder"><option value="">Everything in the media folder</option>${[...new Set([...dirs, ...(s.folder && !dirs.includes(s.folder) ? [s.folder] : [])])].map(d => opt(d, esc(d), s.folder)).join('')}</select></label>
@@ -208,7 +211,8 @@ function readForm() {
     number: parseInt($('#f-number').value, 10), name: $('#f-name').value.trim(), order: $('#f-order').value,
     ad_group_id: $('#f-ad').value || null, ad_break_seconds: parseInt($('#f-pod').value, 10), ad_break_every: parseInt($('#f-every').value, 10),
     source: {type, folder: $('#f-folder').value.trim(), url: $('#f-url').value.trim(), keep: parseInt($('#f-keep').value, 10) || 15,
-             refresh_hours: parseFloat($('#f-refresh').value), quality: parseInt($('#f-quality').value, 10)},
+             refresh_hours: parseFloat($('#f-refresh').value), quality: parseInt($('#f-quality').value, 10),
+             subtitles: $('#f-subs').value === '1', sub_lang: ($('#f-sublang').value.trim() || 'en')},
   };
 }
 

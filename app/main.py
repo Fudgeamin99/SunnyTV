@@ -41,6 +41,8 @@ class Source(BaseModel):
     keep: int = Field(15, ge=1, le=100)
     refresh_hours: float = Field(6, ge=0.25, le=168)
     quality: Literal[480, 720, 1080, 1440, 2160] = 1080
+    subtitles: bool = False
+    sub_lang: str = Field("en", min_length=2, max_length=12, pattern=r"^[A-Za-z-]+$")
 
 
 class ChannelIn(BaseModel):
@@ -178,7 +180,7 @@ def update_channel(ch_id: str, body: ChannelIn):
         old = ch["source"]
         new = body.source.model_dump()
         if new["type"] == "youtube":
-            resync = old.get("type") != "youtube" or any(old.get(k) != new[k] for k in ("url", "keep", "quality"))
+            resync = old.get("type") != "youtube" or any(old.get(k) != new[k] for k in ("url", "keep", "quality", "subtitles", "sub_lang"))
         ch.update(number=body.number, name=body.name, source=new, order=body.order,
                   ad_group_id=body.ad_group_id, ad_break_seconds=body.ad_break_seconds,
                   ad_break_every=body.ad_break_every)

@@ -74,6 +74,81 @@ def download(video_id, dest, quality):
     return _find_file(dest, video_id)
 
 
+def _clean_vtt(vtt_path, srt_path):
+    """WebVTT -> SRT. YouTube's automatic captions repeat each line as they roll up the screen
+    and carry timing tags, so strip tags and drop lines already shown by the previous cue."""
+    ts = re.compile(r"(\d+:)?(\d\d):(\d\d)[.,](\d{3})\s+-->\s+(\d+:)?(\d\d):(\d\d)[.,](\d{3})")
+    with open(vtt_path, encoding="utf-8", errors="replace") as f:
+        blocks = re.split(r"\n\s*\n", f.read().replace("\r", ""))
+    cues, prev = [], []
+    for b in blocks:
+        lines = b.strip().split("\n")
+        i = next((k for k, l in enumerate(lines) if ts.search(l)), None)
+        if i is None:
+            continue
+        m = ts.search(lines[i])
+        a = (int(m[1][:-1]) if m[1] else 0) * 3600 + int(m[2]) * 60 + int(m[3]) + int(m[4]) / 1000
+        z = (int(m[5][:-1]) if m[5] else 0) * 3600 + int(m[6]) * 60 + int(m[7]) + int(m[8]) / 1000
+        text = []
+        for l in lines[i + 1:]:
+            l = re.sub(r"<[^>]+>", "", l).replace("&nbsp;", " ").replace("&amp;", "&") \
+                .replace("&lt;", "<").replace("&gt;", ">").strip()
+            if l:
+                text.append(l)
+        new = [l for l in text if l not in prev]
+        prev = text or prev
+        if not new or z - a < 0.05:
+            continue
+        cues.append((a, z, new))
+
+    def stamp(t):
+        ms = int(round(t * 1000))
+        return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for n, (a, z, text) in enumerate(cues, 1):
+            f.write(f"{n}\n{stamp(a)} --> {stamp(z)}\n" + "\n".join(text) + "\n\n")
+    return len(cues)
+
+
+def fetch_subs(video_id, dest, lang):
+    """Download captions for one video and leave <id>.srt next to it. Returns the path, or None
+    if the video has no captions in that language (remembered, so it is not retried every sync)."""
+    srt = os.path.join(dest, f"{video_id}.{lang}.srt")
+    none = os.path.join(dest, f"{video_id}.{lang}.nosubs")
+    if os.path.exists(srt):
+        return srt
+    if os.path.exists(none):
+        return None
+    _run(_base() + [
+        "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", lang,
+        "--sub-format", "vtt", "--no-playlist",
+        "-o", os.path.join(dest, "%(id)s.%(ext)s"),
+        f"https://www.youtube.com/watch?v={video_id}",
+    ], 300)
+    vtts = sorted((f for f in os.listdir(dest) if f.startswith(video_id + ".") and f.endswith(".vtt")), key=len)
+    ok = False
+    if vtts:
+        try:
+            ok = _clean_vtt(os.path.join(dest, vtts[0]), srt) > 0
+        except Exception as ex:
+            print(f"[subs] {video_id}: {ex}", flush=True)
+        for f in vtts:
+            try:
+                os.remove(os.path.join(dest, f))
+            except OSError:
+                pass
+    if ok:
+        return srt
+    try:
+        open(none, "w").close()
+        if os.path.exists(srt):
+            os.remove(srt)
+    except OSError:
+        pass
+    return None
+
+
 def sync_channel(ch_id):
     cfg = store.load()
     ch = store.find_channel(cfg, ch_id)
@@ -86,6 +161,8 @@ def sync_channel(ch_id):
     keep = int(src.get("keep", 15))
     quality = int(src.get("quality", 1080))
     hours = float(src.get("refresh_hours", 6))
+    want_subs = bool(src.get("subtitles"))
+    lang = (src.get("sub_lang") or "en").strip() or "en"
 
     store.update_channel(ch_id, sync_status="checking for new videos")
     entries = list_latest(url, keep)
@@ -112,7 +189,13 @@ def sync_channel(ch_id):
         if path:
             d = media.get_duration(path, probe=True)
             if d:
-                items.append({"id": e["id"], "title": e["title"], "path": path, "duration": d})
+                item = {"id": e["id"], "title": e["title"], "path": path, "duration": d}
+                if want_subs:
+                    try:
+                        item["subs"] = fetch_subs(e["id"], dest, lang)
+                    except Exception as ex:
+                        print(f"[{ch_id}] subtitles failed for {e['id']}: {ex}", flush=True)
+                items.append(item)
         store.update_channel(ch_id, yt_items=merged(i))
     media.flush()
 

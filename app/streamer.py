@@ -45,13 +45,24 @@ def encoder_info():
             "device": VAAPI_DEVICE, "device_found": os.path.exists(VAAPI_DEVICE)}
 
 
-def build_cmd(path, offset, remaining, out):
+def _sub_filter(subs, offset):
+    """Burn subtitles into the picture. Input seeking restarts timestamps at 0, so shift them
+    back to the position in the source file while the subtitle filter runs."""
+    esc = subs.replace("\\", "/").replace(":", "\\:").replace("'", "\\'").replace(",", "\\,")
+    style = "FontName=DejaVu Sans,FontSize=18,Bold=1,Outline=2,Shadow=0,MarginV=24"
+    return (f"setpts=PTS+{offset:.3f}/TB,subtitles=filename='{esc}':force_style='{style}',"
+            "setpts=PTS-STARTPTS,")
+
+
+def build_cmd(path, offset, remaining, out, subs=None):
     w, h = RESOLUTION.split("x")
     hw = hw_active()
     # Fix non-square pixels (DVD/VOB) and interlacing first, then fit into the frame.
     vf = ("scale=trunc(iw*sar/2)*2:ih,setsar=1,yadif=deint=interlaced,"
           f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,"
+          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
+          + (_sub_filter(subs, offset) if subs else "")
+          + "fps=30,"
           + ("format=nv12,hwupload" if hw else "format=yuv420p"))
     if hw:   # decode on the CPU (works for every format), encode on the GPU
         pre = ["-vaapi_device", VAAPI_DEVICE]
@@ -128,7 +139,8 @@ class Runner:
                 log = open(os.path.join(LOG_DIR, f"{ch['number']}.log"), "ab")
                 try:
                     self.proc = subprocess.Popen(
-                        build_cmd(path, pos["segment"].get("src_start", 0.0) + pos["offset"], rem, out),
+                        build_cmd(path, pos["segment"].get("src_start", 0.0) + pos["offset"], rem, out,
+                                  pos["segment"].get("subs")),
                         stdout=subprocess.DEVNULL, stderr=log)
                     while self.proc.poll() is None:
                         if self.stop_evt.is_set() or self._idle():
