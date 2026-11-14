@@ -238,7 +238,14 @@ def channel_items(ch_id: str):
     cfg = store.load()
     ch = get_channel_or_404(cfg, ch_id)
     tl = schedule.build_timeline(cfg, ch)
-    vids = [{"title": s["title"], "duration": s["duration"]} for s in tl["segments"] if s["kind"] == "video" and s.get("part", 0) == 0]
+    vids = []
+    for s in tl["segments"]:
+        if s["kind"] != "video":
+            continue
+        if s.get("part", 0) == 0:
+            vids.append({"title": s["title"], "duration": 0.0})
+        # a video split by ad breaks is several parts: its length is where the last part ends
+        vids[-1]["duration"] = s.get("src_start", 0.0) + s["duration"]
     return {"items": vids, "sync_status": ch.get("sync_status"), "last_sync": ch.get("last_sync"),
             "next_sync": ch.get("next_sync")}
 
