@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunny TV</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@600;700;800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Nunito,system-ui,sans-serif;font-size:16px;color:#1e3a5f;background:linear-gradient(#cfeaff 0,#eef8ff 240px,#f6fbff 100%) fixed}
+.app{display:flex;min-height:100vh;border-bottom:16px solid #6cc04a}
+.side{width:210px;flex:none;background:#fff;border-right:6px solid;border-image:linear-gradient(180deg,#f25c54,#f7a541,#ffd23f,#6cc04a,#4aa3df,#9b7fd1) 1;padding:24px 16px;display:flex;flex-direction:column;gap:8px}
+.mark{border:3px solid #1e3a5f;border-radius:16px;overflow:hidden;line-height:0;margin-bottom:8px}.mark svg{width:100%;height:auto}
+.tg{font-size:13px;color:#4a6785;margin-bottom:16px}
+.nav{padding:12px 16px;border-radius:999px;font-size:16px;font-weight:700;color:#35557a;cursor:pointer;background:none;border:0;text-align:left;font-family:inherit}
+.nav:hover{background:#eef8ff}
+.nav.on{background:#ffd23f;color:#1e3a5f}
+.main{flex:1;padding:32px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.h{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-family:Fredoka,sans-serif;font-weight:600;font-size:32px}
+h2{margin:0;font-family:Fredoka,sans-serif;font-weight:500;font-size:19px}
+.btn{border:2px solid #1e3a5f;background:#fff;color:#1e3a5f;padding:10px 22px;font:800 15px Nunito,sans-serif;min-height:44px;border-radius:999px;cursor:pointer}
+.btn:hover{background:#fff7d1}.btn.p{background:#ffd23f}.btn.danger{border-color:#b3261e;color:#b3261e}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;align-items:center;gap:16px;border:2px solid #bcd9ee;border-radius:16px;background:#fff;padding:10px 16px;min-height:60px;flex-wrap:wrap}
+.row.sel{background:#fff3b8;border-color:#f7a541}
+.row.click{cursor:pointer}
+.lbl{font-size:14px;font-weight:700;color:#35557a;display:flex;flex-direction:column;gap:6px}
+.fld{border:2px solid #7fb4dc;border-radius:12px;padding:10px 12px;min-height:44px;font:600 15px Nunito,sans-serif;width:100%;background:#fff;color:#1e3a5f}
+.tag{border:2px solid #2f7a1f;color:#2f7a1f;background:#e5f6dc;border-radius:999px;padding:2px 12px;font-size:13px;font-weight:800}
+.tag.idle{border-color:#6a7f96;color:#4a6785;background:#eef3f8}
+.tag.err{border-color:#b3261e;color:#b3261e;background:#fdecea}
+.sub{color:#4a6785;font-size:13px;font-weight:600}
+.grow{flex:1;min-width:0}
+.cols{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.card{border:2px solid #bcd9ee;border-radius:20px;background:linear-gradient(90deg,#f25c54,#f7a541,#ffd23f,#6cc04a,#4aa3df,#9b7fd1) top/100% 8px no-repeat #fff;padding:28px 20px 20px;display:flex;flex-direction:column;gap:14px}
+.scroll{max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.gridwrap{overflow-x:auto}
+.grid{position:relative;min-width:900px}
+.grid .line{display:flex;gap:6px;margin-bottom:6px;align-items:stretch}
+.grid .name{width:170px;flex:none;border:2px solid #bcd9ee;background:#fff;border-radius:12px;padding:8px 12px;font-weight:800;min-height:52px;display:flex;align-items:center;cursor:pointer}
+.grid .track{position:relative;flex:1;height:52px}
+.blk{position:absolute;top:0;bottom:0;border:2px solid #bcd9ee;border-radius:10px;background:#e6f3fc;padding:6px 8px;font-size:13px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.blk.now{background:#fff3b8;border-color:#f7a541}
+.tick{position:absolute;top:0;font-size:12px;font-weight:700;color:#4a6785;border-left:2px solid #bcd9ee;padding-left:4px;height:100%}
+video{width:100%;max-height:380px;background:#000;border-radius:12px}
+.toast{position:fixed;bottom:24px;right:24px;background:#1e3a5f;color:#fff;padding:12px 20px;border-radius:12px;font-weight:700;z-index:9}
+@media(max-width:760px){.app{flex-direction:column}.side{width:auto;flex-direction:row;flex-wrap:wrap;border-right:0}.mark{width:120px}.main{padding:16px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+<div class="mark"><svg viewBox="0 0 168 120" role="img" aria-label="Sunny TV logo"><rect width="168" height="120" fill="#bfe3fb"/><line x1="52.0" y1="30.0" x2="58.0" y2="30.0" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="47.3" y1="41.3" x2="51.6" y2="45.6" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="36.0" y1="46.0" x2="36.0" y2="52.0" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="24.7" y1="41.3" x2="20.4" y2="45.6" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="20.0" y1="30.0" x2="14.0" y2="30.0" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="24.7" y1="18.7" x2="20.4" y2="14.4" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="36.0" y1="14.0" x2="36.0" y2="8.0" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><line x1="47.3" y1="18.7" x2="51.6" y2="14.4" stroke="#ffd23f" stroke-width="3" stroke-linecap="round"/><circle cx="36" cy="30" r="12" fill="#ffd23f"/><path d="M56 86A56 56 0 0 1 168 86" fill="none" stroke="#f25c54" stroke-width="6"/><path d="M62 86A50 50 0 0 1 162 86" fill="none" stroke="#f7a541" stroke-width="6"/><path d="M68 86A44 44 0 0 1 156 86" fill="none" stroke="#ffd23f" stroke-width="6"/><path d="M74 86A38 38 0 0 1 150 86" fill="none" stroke="#6cc04a" stroke-width="6"/><path d="M80 86A32 32 0 0 1 144 86" fill="none" stroke="#4aa3df" stroke-width="6"/><path d="M86 86A26 26 0 0 1 138 86" fill="none" stroke="#9b7fd1" stroke-width="6"/><path d="M0 84Q40 66 84 82T168 80V120H0Z" fill="#6cc04a"/><g fill="#fff"><circle cx="96" cy="62" r="12"/><circle cx="110" cy="56" r="15"/><circle cx="124" cy="63" r="12"/><rect x="92" y="62" width="36" height="13" rx="6"/></g><g fill="none" stroke="#1e3a5f" stroke-width="2" stroke-linecap="round"><path d="M101 62q3-4 6 0"/><path d="M113 62q3-4 6 0"/></g><path d="M104 67q6 9 12 0z" fill="#1e3a5f"/><g fill="#4aa3df"><ellipse cx="100" cy="68" rx="1.8" ry="3"/><ellipse cx="120" cy="68" rx="1.8" ry="3"/></g><rect y="94" width="168" height="26" fill="#ffd23f"/><rect y="94" width="168" height="2" fill="#1e3a5f"/><text x="84" y="113" text-anchor="middle" font-family="Fredoka,sans-serif" font-weight="600" font-size="19" fill="#1e3a5f">Sunny TV</text></svg></div>
+<div class="tg">always on, always bright</div>
+<button class="nav" data-nav="channels">Channels</button>
+<button class="nav" data-nav="library">Library</button>
+<button class="nav" data-nav="adverts">Adverts</button>
+<button class="nav" data-nav="guide">Guide</button>
+<button class="nav" data-nav="settings">Settings</button>
+</aside>
+<main class="main" id="main"></main>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(method, url, body) {
+  const r = await fetch(url, {method, headers: body ? {'Content-Type': 'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
+  if (!r.ok) {
+    let m = r.statusText;
+    try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch (e) {}
+    throw new Error(m);
+  }
+  return r.json();
+}
+const fmt = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${String(m).padStart(2, '0')}m` : m ? `${m}m ${String(x).padStart(2, '0')}s` : `${x}s`; };
+const clock = t => new Date(t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+function toast(msg) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; document.body.appendChild(d); setTimeout(() => d.remove(), 3500); }
+
+const S = {view: 'channels', timer: null, hls: null};
+function clearTimer() { if (S.timer) { clearInterval(S.timer); S.timer = null; } if (S.hls) { S.hls.destroy(); S.hls = null; } }
+async function go(view, arg) {
+  clearTimer();
+  S.view = view;
+  document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.dataset.nav === (view === 'editor' ? 'channels' : view)));
+  try {
+    if (view === 'channels') await viewChannels();
+    else if (view === 'editor') await viewEditor(arg);
+    else if (view === 'library') await viewLibrary(arg || '');
+    else if (view === 'adverts') await viewAdverts();
+    else if (view === 'guide') await viewGuide();
+    else if (view === 'settings') await viewSettings();
+  } catch (e) { $('#main').innerHTML = `<div class="card"><h2>Something went wrong</h2><div class="sub">${esc(e.message)}</div></div>`; }
+}
+
+/* ---------- Channels ---------- */
+async function viewChannels() {
+  const [chs, groups, info] = await Promise.all([api('GET', '/api/channels'), api('GET', '/api/ad-groups'), api('GET', '/api/info')]);
+  const gname = id => (groups.find(g => g.id === id) || {}).name || 'None';
+  const rows = chs.map(c => {
+    const now = c.now ? (c.now.kind === 'ad' ? 'Ad break' : esc(c.now.title)) : (c.videos ? 'Starting...' : (c.source.type === 'youtube' ? esc(c.sync_status || 'waiting for sync') : 'No videos found yet'));
+    return `<div class="row"><b style="width:36px">${c.number}</b><div class="grow"><b>${esc(c.name)}</b><div class="sub">Now: ${now}</div></div>
+      <div class="sub" style="width:110px">${c.videos} videos</div><div class="sub" style="width:170px">Ads: ${esc(gname(c.ad_group_id))}</div>
+      <span class="tag ${c.live ? '' : 'idle'}">${c.live ? 'Live' : 'Idle'}</span>
+      <button class="btn" data-act="edit" data-id="${c.id}">Edit</button></div>`;
+  }).join('') || '<div class="sub">No channels yet. Create one to get started.</div>';
+  const link = (label, url) => `<label class="lbl grow" style="min-width:260px">${label}<div style="display:flex;gap:8px"><input class="fld" readonly value="${esc(url)}"><button class="btn" data-act="copy" data-text="${esc(url)}">Copy</button></div></label>`;
+  $('#main').innerHTML = `<div class="h"><h1>Channels</h1><button class="btn p" data-act="edit" data-id="new">New channel</button></div>${rows}
+    <div class="card"><h2>Tuner links</h2><div class="cols">${link('M3U playlist (HLS)', info.m3u)}${link('M3U playlist (MPEG-TS, for Plex)', info.m3u_ts)}${link('XMLTV guide', info.xmltv)}</div>
+    <div class="sub">Channels only start encoding when someone tunes in, and stop shortly after the last viewer leaves.</div></div>`;
+  S.timer = setInterval(() => { if (S.view === 'channels') viewChannels(); }, 15000);
+}
+
+/* ---------- Channel editor ---------- */
+async function viewEditor(id) {
+  const isNew = id === 'new';
+  const [groups, dirs, chs] = await Promise.all([api('GET', '/api/ad-groups'), api('GET', '/api/library/dirs'), api('GET', '/api/channels')]);
+  const c = isNew ? {number: Math.max(0, ...chs.map(x => x.number)) + 1, name: '', source: {type: 'youtube', folder: '', url: '', keep: 15, refresh_hours: 6, quality: 1080}, order: 'sequential', ad_group_id: null, ad_break_seconds: 60} : chs.find(x => x.id === id);
+  if (!c) throw new Error('Channel not found');
+  const s = c.source;
+  const opt = (v, label, cur) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${label}</option>`;
+  $('#main').innerHTML = `<div class="h"><h1>${isNew ? 'New channel' : 'Edit channel'}</h1><div class="cols" style="gap:12px">
+    <button class="btn" data-act="cancel">Cancel</button>${isNew ? '' : '<button class="btn danger" data-act="delete" data-id="' + c.id + '">Delete</button>'}
+    <button class="btn p" data-act="save" data-id="${isNew ? 'new' : c.id}">Save</button></div></div>
+  <div class="cols"><div class="card" style="width:340px">
+    <label class="lbl">Channel number<input class="fld" id="f-number" type="number" min="1" value="${c.number}"></label>
+    <label class="lbl">Name<input class="fld" id="f-name" value="${esc(c.name)}"></label>
+    <label class="lbl">Playback order<select class="fld" id="f-order">${opt('sequential', 'Sequential', c.order)}${opt('shuffle', 'Shuffle (fixed order per channel)', c.order)}</select></label>
+    <label class="lbl">Advert group<select class="fld" id="f-ad"><option value="">None</option>${groups.map(g => opt(g.id, esc(g.name), c.ad_group_id)).join('')}</select></label>
+    <label class="lbl">Ad break after each video<select class="fld" id="f-pod">${[[0, 'No ads'], [30, '30 seconds'], [60, '1 minute'], [90, '90 seconds'], [120, '2 minutes']].map(([v, l]) => opt(v, l, c.ad_break_seconds)).join('')}</select></label>
+  </div>
+  <div class="card grow" style="min-width:320px"><div class="h"><h2>Source</h2><span class="sub" id="sync-line"></span></div>
+    <label class="lbl">Source type<select class="fld" id="f-type">${opt('youtube', 'YouTube channel', s.type)}${opt('folder', 'Local folder', s.type)}</select></label>
+    <div id="src-yt" class="cols" style="gap:16px">
+      <label class="lbl grow" style="flex:2;min-width:240px">Channel URL<input class="fld" id="f-url" placeholder="https://www.youtube.com/@yourchannel" value="${esc(s.url)}"></label>
+      <label class="lbl grow" style="min-width:110px">Keep latest<input class="fld" id="f-keep" type="number" min="1" max="100" value="${s.keep}"></label>
+      <label class="lbl grow" style="min-width:130px">Refresh every<select class="fld" id="f-refresh">${[[1, '1 hour'], [6, '6 hours'], [24, '24 hours']].map(([v, l]) => opt(v, l, s.refresh_hours)).join('')}</select></label>
+      <label class="lbl grow" style="min-width:110px">Max quality<select class="fld" id="f-quality">${[480, 720, 1080, 1440].map(v => opt(v, v + 'p', s.quality)).join('')}</select></label>
+      <div class="sub" style="width:100%">Downloaded with yt-dlp. Older videos drop off the loop. Use only content you own or have permission to broadcast.</div>
+    </div>
+    <div id="src-folder"><label class="lbl">Folder inside your media folder (blank = everything)<input class="fld" id="f-folder" list="dirs" value="${esc(s.folder)}"><datalist id="dirs">${dirs.map(d => `<option value="${esc(d)}">`).join('')}</datalist></label></div>
+    <div class="h"><h2>Playlist</h2>${isNew ? '' : '<button class="btn" data-act="sync" data-id="' + c.id + '" id="sync-btn">Sync now</button>'}</div>
+    <div id="pl" class="scroll"><div class="sub">${isNew ? 'Save the channel to see its playlist.' : 'Loading...'}</div></div>
+  </div></div>`;
+  toggleSource();
+  if (!isNew) { refreshPlaylist(c.id); S.timer = setInterval(() => refreshPlaylist(c.id), 4000); }
+}
+function toggleSource() {
+  const t = $('#f-type').value;
+  $('#src-yt').style.display = t === 'youtube' ? '' : 'none';
+  $('#src-folder').style.display = t === 'folder' ? '' : 'none';
+  const b = $('#sync-btn'); if (b) b.style.display = t === 'youtube' ? '' : 'none';
+}
+async function refreshPlaylist(id) {
+  if (!$('#pl')) return;
+  try {
+    const d = await api('GET', `/api/channels/${id}/items`);
+    const sl = $('#sync-line');
+    if (sl) sl.textContent = d.sync_status && d.sync_status !== 'never' ? `Sync: ${d.sync_status}${d.next_sync && d.sync_status.startsWith('ok') ? ', next ' + clock(d.next_sync) : ''}` : '';
+    $('#pl').innerHTML = d.items.length ? d.items.map((v, i) => `<div class="row"><b style="width:28px">${i + 1}</b><div class="grow">${esc(v.title)}</div><span class="sub">${fmt(v.duration)}</span></div>`).join('') : '<div class="sub">Nothing to play yet.</div>';
+  } catch (e) {}
+}
+function readForm() {
+  const type = $('#f-type').value;
+  return {
+    number: parseInt($('#f-number').value, 10), name: $('#f-name').value.trim(), order: $('#f-order').value,
+    ad_group_id: $('#f-ad').value || null, ad_break_seconds: parseInt($('#f-pod').value, 10),
+    source: {type, folder: $('#f-folder').value.trim(), url: $('#f-url').value.trim(), keep: parseInt($('#f-keep').value, 10) || 15,
+             refresh_hours: parseFloat($('#f-refresh').value), quality: parseInt($('#f-quality').value, 10)},
+  };
+}
+
+/* ---------- Library ---------- */
+async function viewLibrary(path) {
+  const d = await api('GET', '/api/library?path=' + encodeURIComponent(path));
+  const parts = path ? path.split('/') : [];
+  const crumbs = ['<button class="btn" data-act="lib" data-path="">media</button>'].concat(parts.map((p, i) => `<button class="btn" data-act="lib" data-path="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`)).join(' / ');
+  const dirs = d.dirs.map(n => `<div class="row click" data-act="lib" data-path="${esc((path ? path + '/' : '') + n)}"><b>${esc(n)}</b><span class="sub">folder</span></div>`).join('');
+  const files = d.files.map(f => `<div class="row"><div class="grow">${esc(f.name)}</div><span class="sub">${f.duration ? fmt(f.duration) : 'scanning...'}</span></div>`).join('');
+  $('#main').innerHTML = `<div class="h"><h1>Library</h1></div><div class="cols" style="gap:8px;align-items:center">${crumbs}</div>${dirs}${files || (dirs ? '' : '<div class="sub">No video files here. Put videos in the media folder you mounted in docker-compose.</div>')}`;
+}
+
+/* ---------- Adverts ---------- */
+const A = {groups: [], channels: [], lib: [], sel: null, adding: false, q: ''};
+async function viewAdverts() {
+  [A.groups, A.channels, A.lib] = await Promise.all([api('GET', '/api/ad-groups'), api('GET', '/api/channels'), api('GET', '/api/library/files')]);
+  A.adding = false; A.q = '';
+  pickGroup(A.sel && A.groups.find(g => g.id === A.sel.id) ? A.sel.id : (A.groups[0] ? A.groups[0].id : null));
+}
+function pickGroup(id) {
+  const g = A.groups.find(x => x.id === id);
+  A.sel = g ? {id: g.id, name: g.name, clips: [...g.clips], channel_ids: A.channels.filter(c => c.ad_group_id === g.id).map(c => c.id)} : null;
+  renderAdverts();
+}
+function renderAdverts() {
+  const dur = rel => { const f = A.lib.find(x => x.rel === rel); return f && f.duration ? fmt(f.duration) : ''; };
+  const list = A.groups.map(g => `<div class="row click ${A.sel && A.sel.id === g.id ? 'sel' : ''}" data-act="pick-group" data-id="${g.id}"><div class="grow"><b>${esc(g.name)}</b><div class="sub">${g.clips.length} ads</div></div></div>`).join('') || '<div class="sub">No groups yet.</div>';
+  let right = '<div class="card grow"><div class="sub">Create a group to start.</div></div>';
+  if (A.sel) {
+    const s = A.sel;
+    const avail = A.lib.filter(f => !s.clips.includes(f.rel) && f.rel.toLowerCase().includes(A.q.toLowerCase()));
+    const picker = A.adding ? `<div class="card" style="border-color:#f7a541"><input class="fld" id="adq" placeholder="Filter library..." value="${esc(A.q)}">
+      <div class="scroll">${avail.slice(0, 300).map(f => `<label class="row" style="min-height:44px"><input type="checkbox" class="pick" value="${esc(f.rel)}" style="width:20px;height:20px;accent-color:#f7a541"><span class="grow">${esc(f.rel)}</span><span class="sub">${f.duration ? fmt(f.duration) : ''}</span></label>`).join('') || '<div class="sub">No matching files.</div>'}</div>
+      <div><button class="btn p" data-act="add-picked">Add selected</button> <button class="btn" data-act="toggle-add">Close</button></div></div>` : '';
+    right = `<div class="card grow" style="min-width:320px"><label class="lbl">Group name<input class="fld" id="g-name" value="${esc(s.name)}"></label>
+      <div class="h"><h2>Adverts in group</h2><button class="btn" data-act="toggle-add">Add adverts</button></div>${picker}
+      ${s.clips.map((r, i) => `<div class="row"><b style="width:24px">${i + 1}</b><div class="grow">${esc(r)}</div><span class="sub">${dur(r)}</span><button class="btn" data-act="rm-clip" data-i="${i}" aria-label="Remove">Remove</button></div>`).join('') || '<div class="sub">No adverts yet. Put ad clips in your media folder, then add them here.</div>'}
+      <h2>Apply to channels</h2><div class="cols" style="gap:12px">${A.channels.map(c => `<label class="row" style="flex:1;min-width:200px;gap:12px"><input type="checkbox" class="chk" value="${c.id}" ${s.channel_ids.includes(c.id) ? 'checked' : ''} style="width:22px;height:22px;accent-color:#f7a541">${c.number} ${esc(c.name)}</label>`).join('') || '<div class="sub">No channels yet.</div>'}</div>
+      <div class="sub">An advert break plays after each video, for the length you set per channel. Ads rotate through the group.</div>
+      <div class="cols" style="gap:12px"><button class="btn p" data-act="save-group">Save group</button><button class="btn danger" data-act="del-group">Delete group</button></div></div>`;
+  }
+  $('#main').innerHTML = `<div class="h"><h1>Adverts</h1><button class="btn p" data-act="new-group">New group</button></div><div class="cols"><div class="card" style="width:290px"><h2>Groups</h2>${list}</div>${right}</div>`;
+}
+
+/* ---------- Guide ---------- */
+async function viewGuide() {
+  const g = await api('GET', '/api/guide?hours=6');
+  const W = 6 * 3600, t0 = Math.floor(g.now / 1800) * 1800, t1 = t0 + W + 1800;
+  const span = t1 - t0, pct = t => ((t - t0) / span * 100);
+  let ticks = '';
+  for (let t = t0; t < t1; t += 1800) ticks += `<div class="tick" style="left:${pct(t)}%">${clock(t)}</div>`;
+  const rows = g.channels.map(c => {
+    const blocks = c.programmes.map(p => {
+      const a = Math.max(p.start, t0), b = Math.min(p.stop, t1);
+      if (b <= a) return '';
+      const now = p.start <= g.now && p.stop > g.now;
+      return `<div class="blk ${now ? 'now' : ''}" title="${esc(p.title)} ${clock(p.start)}" style="left:${pct(a)}%;width:${(b - a) / span * 100}%">${esc(p.title)}</div>`;
+    }).join('');
+    return `<div class="line"><div class="name" data-act="watch" data-num="${c.number}" data-name="${esc(c.name)}">${c.number} ${esc(c.name)}</div><div class="track">${blocks}</div></div>`;
+  }).join('') || '<div class="sub">No channels yet.</div>';
+  $('#main').innerHTML = `<div class="h"><h1>Guide</h1><span class="sub">Click a channel name to watch</span></div>
+    <div class="card"><div class="h"><h2 id="pv-title">Preview</h2><span class="sub">The stream can take about 10 seconds to start</span></div><video id="pv" controls muted playsinline></video></div>
+    <div class="gridwrap"><div class="grid"><div class="line"><div style="width:170px;flex:none"></div><div class="track" style="height:22px">${ticks}</div></div>${rows}</div></div>`;
+  S.timer = setInterval(() => { if (S.view === 'guide' && !$('#pv').currentTime) viewGuide(); }, 60000);
+}
+function watch(num, name) {
+  const v = $('#pv'), url = `/stream/${num}/index.m3u8`;
+  $('#pv-title').textContent = `${num} ${name}`;
+  if (S.hls) { S.hls.destroy(); S.hls = null; }
+  if (window.Hls && Hls.isSupported()) { S.hls = new Hls({liveSyncDurationCount: 3}); S.hls.loadSource(url); S.hls.attachMedia(v); }
+  else v.src = url;
+  v.play().catch(() => {});
+  scrollTo({top: 0, behavior: 'smooth'});
+}
+
+/* ---------- Settings / updates ---------- */
+async function viewSettings() {
+  const st = await api('GET', '/api/update/status');
+  $('#main').innerHTML = `<div class="h"><h1>Settings</h1></div>
+    <div class="card"><h2>Updates</h2>
+      <div class="sub">Pulls the latest app code from <b>${esc(st.repo)}</b> (branch ${esc(st.branch)}) on GitHub. Current version: <b>${esc(st.current)}</b></div>
+      <div id="upd-msg" class="sub" aria-live="polite"></div>
+      <div class="cols" style="gap:12px"><button class="btn" data-act="upd-check" id="upd-check">Check for updates</button>
+        <button class="btn p" data-act="upd-apply" id="upd-apply" style="display:none">Update now</button></div>
+      <div class="sub">Updating restarts the app for a few seconds, and open streams reconnect on their own. Changes to the Docker image itself (new Dockerfile or requirements) need a new image pulled on the NAS.</div>
+    </div>`;
+}
+async function waitForRestart() {
+  $('#upd-msg').textContent = 'Updated. Restarting...';
+  await new Promise(r => setTimeout(r, 4000));
+  for (let i = 0; i < 60; i++) {
+    try { const r = await fetch('/api/info', {cache: 'no-store'}); if (r.ok) { location.reload(); return; } } catch (e) {}
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  $('#upd-msg').textContent = 'The app did not come back. Check the container on your NAS.';
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', async e => {
+  const nav = e.target.closest('[data-nav]'); if (nav) return go(nav.dataset.nav);
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const d = el.dataset;
+  try {
+    switch (d.act) {
+      case 'edit': return go('editor', d.id);
+      case 'cancel': return go('channels');
+      case 'copy': await navigator.clipboard.writeText(d.text); return toast('Copied');
+      case 'save': {
+        const body = readForm();
+        if (!body.name) return toast('Give the channel a name');
+        if (body.source.type === 'youtube' && !body.source.url) return toast('Paste a YouTube channel URL');
+        if (d.id === 'new') await api('POST', '/api/channels', body); else await api('PUT', '/api/channels/' + d.id, body);
+        toast('Saved'); return go('channels');
+      }
+      case 'delete': if (!confirm('Delete this channel and its downloaded videos?')) return; await api('DELETE', '/api/channels/' + d.id); return go('channels');
+      case 'sync': await api('POST', '/api/channels/' + d.id + '/sync'); toast('Sync started'); return refreshPlaylist(d.id);
+      case 'upd-check': {
+        const msg = $('#upd-msg'), apply = $('#upd-apply');
+        msg.textContent = 'Checking GitHub...'; apply.style.display = 'none'; el.disabled = true;
+        try {
+          const r = await api('POST', '/api/update/check');
+          const l = r.latest ? ` Latest change: "${r.latest.message}" (${r.latest.sha}).` : '';
+          if (r.needs_rebuild) msg.textContent = 'A newer version exists, but it changes the Docker image. Pull the newest image on your NAS to get it.' + l;
+          else if (r.available) { msg.textContent = 'An update is available.' + l; apply.style.display = ''; }
+          else msg.textContent = 'You are up to date.' + l;
+        } finally { el.disabled = false; }
+        return;
+      }
+      case 'upd-apply': {
+        if (!confirm('Install the update? The app will restart for a few seconds.')) return;
+        el.disabled = true; $('#upd-msg').textContent = 'Downloading update...';
+        try { await api('POST', '/api/update/apply'); } catch (err) { el.disabled = false; $('#upd-msg').textContent = err.message; return; }
+        return waitForRestart();
+      }
+      case 'lib': return go('library', d.path);
+      case 'watch': return watch(d.num, d.name);
+      case 'pick-group': return pickGroup(d.id);
+      case 'new-group': { const g = await api('POST', '/api/ad-groups', {name: 'New group', clips: []}); A.groups.push(g); return pickGroup(g.id); }
+      case 'toggle-add': A.adding = !A.adding; return renderAdverts();
+      case 'add-picked': { document.querySelectorAll('.pick:checked').forEach(c => A.sel.clips.push(c.value)); A.adding = false; return renderAdverts(); }
+      case 'rm-clip': A.sel.clips.splice(parseInt(d.i, 10), 1); return renderAdverts();
+      case 'save-group': {
+        const s = A.sel;
+        await api('PUT', '/api/ad-groups/' + s.id, {name: s.name || 'Untitled', clips: s.clips});
+        await api('PUT', `/api/ad-groups/${s.id}/channels`, {channel_ids: s.channel_ids});
+        toast('Group saved'); return viewAdverts();
+      }
+      case 'del-group': if (!confirm('Delete this advert group?')) return; await api('DELETE', '/api/ad-groups/' + A.sel.id); A.sel = null; return viewAdverts();
+    }
+  } catch (err) { toast(err.message); }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'f-type') toggleSource();
+  if (e.target.classList.contains('chk') && A.sel) A.sel.channel_ids = [...document.querySelectorAll('.chk:checked')].map(c => c.value);
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'g-name' && A.sel) A.sel.name = e.target.value;
+  if (e.target.id === 'adq') { A.q = e.target.value; const pos = e.target.selectionStart; renderAdverts(); const q = $('#adq'); q.focus(); q.setSelectionRange(pos, pos); }
+});
+go('channels');
+</script>
+</body>
+</html>

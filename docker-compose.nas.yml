@@ -1,0 +1,19 @@
+# For a NAS (UGREEN UGOS, Synology, etc.): paste into the NAS's Docker "project" / compose screen.
+# Edit the three lines marked CHANGE, nothing else is needed.
+services:
+  sunny-tv:
+    image: ghcr.io/fudgeamin99/sunnytv:latest
+    container_name: sunny-tv
+    restart: unless-stopped   # needed: the in-app Update button restarts the app by exiting it
+    ports:
+      - "8000:8000"           # CHANGE the left number if port 8000 is taken on your NAS
+    environment:
+      TZ: Europe/London
+      PUBLIC_URL: http://192.168.1.50:8000   # CHANGE to your NAS's IP and the port above
+      RESOLUTION: 1280x720
+      VIDEO_BITRATE: 3000k
+      X264_PRESET: veryfast
+      IDLE_STOP_SECONDS: 45
+    volumes:
+      - /volume1/docker/sunnytv/data:/data   # CHANGE to a folder on your NAS for settings and downloads
+      - /volume1/Media:/media:ro             # CHANGE to the folder holding your own videos and ads

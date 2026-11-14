@@ -1,0 +1,159 @@
+"""Per-channel FFmpeg runner that produces a live HLS stream.
+
+A runner starts when someone asks for a channel and stops after IDLE_STOP_SECONDS
+with no viewers. It plays whatever the schedule says is on right now, seeking to
+the right offset, and moves on to the next item when one ends.
+"""
+import asyncio
+import os
+import shutil
+import subprocess
+import threading
+import time
+
+from . import schedule, store
+
+HLS_DIR = os.path.join(store.DATA_DIR, "hls")
+LOG_DIR = os.path.join(store.DATA_DIR, "logs")
+IDLE = int(os.environ.get("IDLE_STOP_SECONDS", "45"))
+RESOLUTION = os.environ.get("RESOLUTION", "1280x720")
+VIDEO_BITRATE = os.environ.get("VIDEO_BITRATE", "3000k")
+PRESET = os.environ.get("X264_PRESET", "veryfast")
+
+_runners = {}
+_rlock = threading.Lock()
+
+
+def out_dir(ch_id):
+    return os.path.join(HLS_DIR, ch_id)
+
+
+def build_cmd(path, offset, remaining, out):
+    w, h = RESOLUTION.split("x")
+    vf = (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+          f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p")
+    return [
+        "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
+        "-re", "-ss", f"{offset:.3f}", "-i", path, "-t", f"{remaining:.3f}",
+        "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf,
+        "-c:v", "libx264", "-preset", PRESET,
+        "-b:v", VIDEO_BITRATE, "-maxrate", VIDEO_BITRATE, "-bufsize", "6000k",
+        "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-af", "aresample=async=1",
+        "-f", "hls", "-hls_time", "4", "-hls_list_size", "8",
+        "-hls_flags", "delete_segments+append_list+omit_endlist+discont_start",
+        "-hls_segment_filename", os.path.join(out, "seg_%06d.ts"),
+        os.path.join(out, "index.m3u8"),
+    ]
+
+
+class Runner:
+    def __init__(self, ch_id):
+        self.ch_id = ch_id
+        self.last_hit = time.time()
+        self.stop_evt = threading.Event()
+        self.proc = None
+        self.thread = threading.Thread(target=self._run, daemon=True, name=f"runner-{ch_id}")
+
+    def touch(self):
+        self.last_hit = time.time()
+
+    def alive(self):
+        return self.thread.is_alive() and not self.stop_evt.is_set()
+
+    def stop(self):
+        self.stop_evt.set()
+        p = self.proc
+        if p and p.poll() is None:
+            p.terminate()
+
+    def _idle(self):
+        return time.time() - self.last_hit > IDLE
+
+    def _run(self):
+        out = out_dir(self.ch_id)
+        shutil.rmtree(out, ignore_errors=True)
+        os.makedirs(out, exist_ok=True)
+        os.makedirs(LOG_DIR, exist_ok=True)
+        try:
+            while not self.stop_evt.is_set() and not self._idle():
+                cfg = store.load()
+                ch = store.find_channel(cfg, self.ch_id)
+                if not ch:
+                    break
+                tl = schedule.build_timeline(cfg, ch)
+                pos = schedule.position(tl, ch)
+                if not pos:
+                    self.stop_evt.wait(5)
+                    continue
+                rem = pos["remaining"]
+                if rem < 1.0:
+                    self.stop_evt.wait(max(rem, 0.2))
+                    continue
+                path = pos["segment"]["path"]
+                if not os.path.exists(path):
+                    self.stop_evt.wait(2)
+                    continue
+                started = time.time()
+                log = open(os.path.join(LOG_DIR, f"{ch['number']}.log"), "ab")
+                try:
+                    self.proc = subprocess.Popen(
+                        build_cmd(path, pos["offset"], rem, out),
+                        stdout=subprocess.DEVNULL, stderr=log)
+                    while self.proc.poll() is None:
+                        if self.stop_evt.is_set() or self._idle():
+                            self.proc.terminate()
+                            try:
+                                self.proc.wait(5)
+                            except subprocess.TimeoutExpired:
+                                self.proc.kill()
+                            break
+                        time.sleep(0.5)
+                finally:
+                    log.close()
+                if time.time() - started < 2 and rem > 5:
+                    self.stop_evt.wait(5)  # failing fast: do not spin
+        finally:
+            self.stop_evt.set()
+
+
+def ensure(ch_id):
+    with _rlock:
+        r = _runners.get(ch_id)
+        if r and r.alive():
+            r.touch()
+            return r
+        r = Runner(ch_id)
+        _runners[ch_id] = r
+        r.thread.start()
+        return r
+
+
+def is_live(ch_id):
+    r = _runners.get(ch_id)
+    return bool(r and r.alive())
+
+
+def stop(ch_id):
+    r = _runners.get(ch_id)
+    if r:
+        r.stop()
+    shutil.rmtree(out_dir(ch_id), ignore_errors=True)
+
+
+async def wait_ready(ch_id, timeout=30):
+    """Wait until the playlist exists and lists at least one segment."""
+    path = os.path.join(out_dir(ch_id), "index.m3u8")
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            with open(path, "r") as f:
+                if ".ts" in f.read():
+                    return True
+        except OSError:
+            pass
+        r = _runners.get(ch_id)
+        if not r or not r.alive():
+            return False
+        await asyncio.sleep(0.5)
+    return False
