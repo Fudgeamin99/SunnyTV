@@ -366,7 +366,7 @@ function watch(num, name) {
 
 /* ---------- Settings / updates ---------- */
 async function viewSettings() {
-  const [st, info] = await Promise.all([api('GET', '/api/update/status'), api('GET', '/api/info')]);
+  const [st, info, xt] = await Promise.all([api('GET', '/api/update/status'), api('GET', '/api/info'), api('GET', '/api/xtream')]);
   const e = info.encoder;
   const encText = e.mode === 'vaapi' ? 'Hardware (GPU) encoding is on. The CPU stays free.'
     : e.requested !== 'vaapi' ? 'Using the CPU. To use your NAS graphics chip, set HWACCEL=vaapi and map /dev/dri in your compose file (see the README).'
@@ -374,6 +374,16 @@ async function viewSettings() {
     : `No GPU found at ${e.device}, so the CPU is being used. Add the devices line for /dev/dri to your compose file.`;
   $('#main').innerHTML = `<div class="h"><h1>Settings</h1></div>
     <div class="card"><h2>Video encoding</h2><div class="sub">${esc(encText)}</div></div>
+    <div class="card" id="xt-card"><h2>Xtream login</h2>
+      <div class="sub">For IPTV apps that ask for an "Xtream Codes" login (IPTV Smarters, TiviMate, Televizo and others). Choose Xtream Codes in the app, then enter these. The M3U and Plex options still work as before.</div>
+      <div class="cols" style="gap:16px">
+        <label class="lbl grow" style="min-width:260px">Server URL<div style="display:flex;gap:8px"><input class="fld" id="xt-server" readonly value="${esc(xt.server)}"><button class="btn" data-act="copy" data-text="${esc(xt.server)}">Copy</button></div></label>
+        <label class="lbl grow" style="min-width:160px">Username<input class="fld" id="xt-user" value="${esc(xt.username)}" autocomplete="off" spellcheck="false"></label>
+        <label class="lbl grow" style="min-width:160px">Password<input class="fld" id="xt-pass" value="${esc(xt.password)}" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <div class="cols" style="gap:12px"><button class="btn p" data-act="xt-save">Save login</button></div>
+      <div class="sub">Letters, numbers, dot, dash and underscore only. The login only guards the Xtream address; the web page you are on has no login, so keep this on your home network.</div>
+    </div>
     <div class="card"><h2>Updates</h2>
       <div class="sub">Pulls the latest app code from <b>${esc(st.repo)}</b> (branch ${esc(st.branch)}) on GitHub. Current version: <b>${esc(st.current)}</b></div>
       <div id="upd-msg" class="sub" aria-live="polite"></div>
@@ -401,6 +411,10 @@ document.addEventListener('click', async e => {
     switch (d.act) {
       case 'edit': return go('editor', d.id);
       case 'cancel': return go('channels');
+      case 'xt-save': {
+        await api('PUT', '/api/xtream', {username: $('#xt-user').value.trim(), password: $('#xt-pass').value.trim()});
+        return toast('Xtream login saved');
+      }
       case 'logo-pick': return $('#f-logo').click();
       case 'logo-clear': {
         S.pendingLogo = null; $('#logo-prev').hidden = true; $('#logo-clear').hidden = true; $('#f-logo').value = '';

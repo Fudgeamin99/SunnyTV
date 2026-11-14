@@ -1,5 +1,6 @@
 """Sunny TV: web UI, JSON API, IPTV outputs (M3U + XMLTV) and live streams."""
 import asyncio
+import base64
 import os
 import re
 import threading
@@ -10,10 +11,10 @@ from typing import List, Literal, Optional
 from xml.sax.saxutils import escape as xesc
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import logos, media, schedule, store, streamer, updater, youtube
+from . import logos, media, schedule, store, streamer, updater, xtream, youtube
 
 PORT = int(os.environ.get("PORT", "8000"))
 HDHR_TUNERS = int(os.environ.get("HDHR_TUNERS", "4"))   # simultaneous streams Plex may open
@@ -122,7 +123,7 @@ def index():
 def info(request: Request):
     b = base_url(request)
     return {"base": b, "m3u": f"{b}/iptv/channels.m3u", "m3u_ts": f"{b}/iptv/channels.m3u?format=ts",
-            "xmltv": f"{b}/iptv/xmltv.xml", "hdhr": b.split("://", 1)[-1],
+            "xmltv": f"{b}/iptv/xmltv.xml", "hdhr": b.split("://", 1)[-1], "xtream_server": b,
             "encoder": streamer.encoder_info()}
 
 
@@ -472,6 +473,122 @@ def xmltv(request: Request, hours: int = 168):
                          f'channel="sunnytv.{ch["number"]}"><title>{_x(p["title"])}</title></programme>')
     parts.append("</tv>")
     return Response("\n".join(parts), media_type="application/xml")
+
+
+# ---------- Xtream Codes API (IPTV Smarters, TiviMate, ...) ----------
+
+class XtreamIn(BaseModel):
+    username: str
+    password: str
+
+
+@app.get("/api/xtream")
+def xtream_get(request: Request):
+    u, p = xtream.get()
+    return {"server": base_url(request), "username": u, "password": p}
+
+
+@app.put("/api/xtream")
+def xtream_put(body: XtreamIn):
+    try:
+        xtream.set_credentials(body.username.strip(), body.password.strip())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+def _b64(s):
+    return base64.b64encode(str(s).encode("utf-8")).decode("ascii")
+
+
+def _xdt(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _xt_stream_url(b, user, pw, number, hls=False):
+    return f"{b}/live/{user}/{pw}/{number}.{'m3u8' if hls else 'ts'}"
+
+
+@app.get("/player_api.php")
+def xtream_api(request: Request, username: str = "", password: str = "", action: str = "",
+               stream_id: int = 0, limit: int = 4):
+    if not xtream.check(username, password):
+        return JSONResponse({"user_info": {"auth": 0, "status": "Disabled", "message": "Invalid login"}})
+    cfg = store.load()
+    b = base_url(request)
+    chans = sorted(_enabled(cfg), key=lambda c: c["number"])
+    t = time.time()
+    if action == "get_live_categories":
+        return [{"category_id": "1", "category_name": "Sunny TV", "parent_id": 0}]
+    if action == "get_live_streams":
+        return [{"num": i, "name": c["name"], "stream_type": "live", "stream_id": c["number"],
+                 "stream_icon": (b + logos.url_for(c)) if logos.url_for(c) else "",
+                 "epg_channel_id": f"sunnytv.{c['number']}", "added": str(int(c.get("anchor", t))),
+                 "category_id": "1", "custom_sid": "", "tv_archive": 0, "direct_source": "",
+                 "tv_archive_duration": 0} for i, c in enumerate(chans, 1)]
+    if action in ("get_short_epg", "get_simple_data_table"):
+        ch = next((c for c in chans if c["number"] == stream_id), None)
+        if not ch:
+            return {"epg_listings": []}
+        progs = [p for p in _programmes(cfg, ch, 48, t) if p["stop"] > t]
+        progs = progs[:max(1, min(limit, 50))] if action == "get_short_epg" else progs[:200]
+        return {"epg_listings": [{
+            "id": str(i), "epg_id": "", "title": _b64(p["title"]), "lang": "", "start": _xdt(p["start"]),
+            "end": _xdt(p["stop"]), "description": _b64(""), "channel_id": f"sunnytv.{ch['number']}",
+            "start_timestamp": str(int(p["start"])), "stop_timestamp": str(int(p["stop"])),
+            "now_playing": 1 if p["start"] <= t < p["stop"] else 0, "has_archive": 0}
+            for i, p in enumerate(progs, 1)]}
+    if action in ("get_vod_categories", "get_series_categories", "get_vod_streams", "get_series"):
+        return []
+    host = b.split("://", 1)[-1]
+    return {
+        "user_info": {"username": username, "password": password, "message": "", "auth": 1, "status": "Active",
+                      "exp_date": None, "is_trial": "0", "active_cons": "0", "created_at": str(int(t)),
+                      "max_connections": str(HDHR_TUNERS), "allowed_output_formats": ["m3u8", "ts"]},
+        "server_info": {"url": host.split(":")[0], "port": host.split(":")[1] if ":" in host else "80",
+                        "https_port": "", "server_protocol": b.split("://", 1)[0], "rtmp_port": "",
+                        "timezone": "UTC", "timestamp_now": int(t), "time_now": _xdt(t)}}
+
+
+@app.get("/get.php")
+def xtream_m3u(request: Request, username: str = "", password: str = "", output: str = "ts"):
+    if not xtream.check(username, password):
+        raise HTTPException(401, "Invalid login")
+    b = base_url(request)
+    lines = [f'#EXTM3U url-tvg="{b}/xmltv.php?username={username}&password={password}"']
+    for c in sorted(_enabled(store.load()), key=lambda c: c["number"]):
+        n = c["number"]
+        logo = f' tvg-logo="{b}{logos.url_for(c)}"' if logos.url_for(c) else ""
+        lines.append(f'#EXTINF:-1 tvg-id="sunnytv.{n}" tvg-chno="{n}" tvg-name="{c["name"].replace(chr(34), chr(39))}"'
+                     f'{logo} group-title="Sunny TV",{c["name"]}')
+        lines.append(_xt_stream_url(b, username, password, n, hls=output in ("hls", "m3u8")))
+    return PlainTextResponse("\n".join(lines) + "\n", media_type="audio/x-mpegurl")
+
+
+@app.get("/xmltv.php")
+def xtream_xmltv(request: Request, username: str = "", password: str = ""):
+    if not xtream.check(username, password):
+        raise HTTPException(401, "Invalid login")
+    return xmltv(request)
+
+
+@app.get("/live/{username}/{password}/{file}")
+async def xtream_live(username: str, password: str, file: str, request: Request):
+    m = re.fullmatch(r"(\d{1,5})\.(ts|m3u8)", file)
+    if not m or not xtream.check(username, password):
+        raise HTTPException(404)
+    number = int(m.group(1))
+    if m.group(2) == "ts":
+        return await stream_ts(number)
+    ch = _by_number(number)
+    streamer.ensure(ch["id"], always=bool(ch.get("always_on")) and ch.get("enabled", True))
+    if not await streamer.wait_ready(ch["id"]):
+        raise HTTPException(503, "This channel has nothing to play yet")
+    b = base_url(request)
+    with open(os.path.join(streamer.out_dir(ch["id"]), "index.m3u8"), "r") as f:
+        text = f.read()
+    text = "\n".join(f"{b}/stream/{number}/{l}" if l.startswith("seg_") else l for l in text.splitlines()) + "\n"
+    return Response(text, media_type="application/vnd.apple.mpegurl", headers={"Cache-Control": "no-cache"})
 
 
 # ---------- streams ----------
