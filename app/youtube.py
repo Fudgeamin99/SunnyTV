@@ -121,7 +121,7 @@ def fetch_subs(video_id, dest, lang):
     if os.path.exists(none):
         return None
     _run(_base() + [
-        "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", lang,
+        "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", f"{lang},{lang}-orig",
         "--sub-format", "vtt", "--no-playlist",
         "-o", os.path.join(dest, "%(id)s.%(ext)s"),
         f"https://www.youtube.com/watch?v={video_id}",
