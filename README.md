@@ -137,7 +137,9 @@ Notes:
 
 - Each channel is a looping timeline anchored at the moment you created it, so every viewer sees the same
   thing at the same time. The "now playing" position is worked out from the wall clock.
-- A channel only encodes while someone is watching (stops 45s after the last viewer). Everything is
+- Each channel has two switches on the Channels page. **On/Off** hides a channel from Plex, the guide and the playlists.
+  **24/7** keeps it encoding all the time, so it is already running when someone tunes in and never stops.
+  Without 24/7, a channel only encodes while someone is watching (stops 45s after the last viewer). Everything is
   re-encoded to one resolution and bitrate (`RESOLUTION`, `VIDEO_BITRATE`) so items join up cleanly.
 - **YouTube channels** are re-checked on the refresh interval you set. New uploads join the loop and videos
   outside the latest N are deleted from disk.

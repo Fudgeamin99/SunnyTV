@@ -75,8 +75,9 @@ def build_cmd(path, offset, remaining, out):
 
 
 class Runner:
-    def __init__(self, ch_id):
+    def __init__(self, ch_id, always=False):
         self.ch_id = ch_id
+        self.always = always      # 24/7 channels never stop for lack of viewers
         self.last_hit = time.time()
         self.stop_evt = threading.Event()
         self.proc = None
@@ -95,7 +96,7 @@ class Runner:
             p.terminate()
 
     def _idle(self):
-        return time.time() - self.last_hit > IDLE
+        return (not self.always) and time.time() - self.last_hit > IDLE
 
     def _run(self):
         out = out_dir(self.ch_id)
@@ -159,13 +160,15 @@ class Runner:
             self.stop_evt.set()
 
 
-def ensure(ch_id):
+def ensure(ch_id, always=None):
     with _rlock:
         r = _runners.get(ch_id)
         if r and r.alive():
             r.touch()
+            if always is not None:
+                r.always = always
             return r
-        r = Runner(ch_id)
+        r = Runner(ch_id, bool(always))
         _runners[ch_id] = r
         r.thread.start()
         return r
@@ -174,6 +177,37 @@ def ensure(ch_id):
 def is_live(ch_id):
     r = _runners.get(ch_id)
     return bool(r and r.alive())
+
+
+def release(ch_id):
+    """Turn off 24/7 for a running channel: it now stops when nobody is watching."""
+    r = _runners.get(ch_id)
+    if r:
+        r.always = False
+        r.touch()
+
+
+def keepalive_once():
+    cfg = store.load()
+    for ch in cfg["channels"]:
+        r = _runners.get(ch["id"])
+        if not ch.get("enabled", True):
+            if r and r.alive():
+                stop(ch["id"])
+        elif ch.get("always_on", False):
+            ensure(ch["id"], always=True)
+        elif r and r.alive() and r.always:
+            release(ch["id"])
+
+
+def keepalive_loop():
+    """Every 10s: start 24/7 channels, restart ones that died, stop channels that were turned off."""
+    while True:
+        try:
+            keepalive_once()
+        except Exception as e:
+            print("keepalive error:", e, flush=True)
+        time.sleep(10)
 
 
 def stop(ch_id):

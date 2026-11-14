@@ -29,6 +29,15 @@ h2{margin:0;font-family:Fredoka,sans-serif;font-weight:500;font-size:19px}
 .lbl{font-size:14px;font-weight:700;color:#35557a;display:flex;flex-direction:column;gap:6px}
 .fld{border:2px solid #7fb4dc;border-radius:12px;padding:10px 12px;min-height:44px;font:600 15px Nunito,sans-serif;width:100%;background:#fff;color:#1e3a5f}
 .tag{border:2px solid #2f7a1f;color:#2f7a1f;background:#e5f6dc;border-radius:999px;padding:2px 12px;font-size:13px;font-weight:800}
+.sw{position:relative;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:800;font-size:13px;color:#35557a;user-select:none}
+.sw input{position:absolute;left:0;top:0;width:44px;height:26px;margin:0;opacity:0;cursor:pointer}
+.sw .knob{width:44px;height:26px;border-radius:999px;background:#7b93ab;position:relative;flex:none;transition:background .15s}
+.sw .knob::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+.sw input:checked + .knob{background:#2f7a1f}
+.sw input:checked + .knob::after{left:21px}
+.sw input:focus-visible + .knob{outline:3px solid #1e3a5f;outline-offset:2px}
+.sw input:disabled{cursor:default}.sw input:disabled + .knob{opacity:.45}
+.row.off{opacity:.65}
 .tag.idle{border-color:#6a7f96;color:#4a6785;background:#eef3f8}
 .tag.err{border-color:#b3261e;color:#b3261e;background:#fdecea}
 .sub{color:#4a6785;font-size:13px;font-weight:600}
@@ -102,15 +111,19 @@ async function viewChannels() {
   const gname = id => (groups.find(g => g.id === id) || {}).name || 'None';
   const rows = chs.map(c => {
     const now = c.now ? (c.now.kind === 'ad' ? 'Ad break' : esc(c.now.title)) : (c.videos ? 'Starting...' : (c.source.type === 'youtube' ? esc(c.sync_status || 'waiting for sync') : 'No videos found yet'));
-    return `<div class="row"><b style="width:36px">${c.number}</b><div class="grow"><b>${esc(c.name)}</b><div class="sub">Now: ${now}</div></div>
+    const tag = !c.enabled ? ['idle', 'Off'] : c.live ? ['', c.always_on ? 'Live 24/7' : 'Live'] : c.always_on ? ['', 'Starting'] : ['idle', 'Idle'];
+    const sw = (flag, label, on, tip, disabled) => `<label class="sw" title="${tip}"><input type="checkbox" role="switch" data-flag="${flag}" data-id="${c.id}" ${on ? 'checked' : ''} ${disabled ? 'disabled' : ''} aria-label="${label} for ${esc(c.name)}"><span class="knob"></span>${label}</label>`;
+    return `<div class="row ${c.enabled ? '' : 'off'}"><b style="width:36px">${c.number}</b><div class="grow"><b>${esc(c.name)}</b><div class="sub">Now: ${now}</div></div>
       <div class="sub" style="width:110px">${c.videos} videos</div><div class="sub" style="width:170px">Ads: ${esc(gname(c.ad_group_id))}</div>
-      <span class="tag ${c.live ? '' : 'idle'}">${c.live ? 'Live' : 'Idle'}</span>
+      ${sw('enabled', 'On', c.enabled, 'Turn this channel on or off. Off channels are hidden from Plex, the guide and the playlists.', false)}
+      ${sw('always_on', '24/7', c.always_on, 'Keep this channel running all the time, even when nobody is watching.', !c.enabled)}
+      <span class="tag ${tag[0]}" style="min-width:74px;text-align:center">${tag[1]}</span>
       <button class="btn" data-act="edit" data-id="${c.id}">Edit</button></div>`;
   }).join('') || '<div class="sub">No channels yet. Create one to get started.</div>';
   const link = (label, url) => `<label class="lbl grow" style="min-width:260px">${label}<div style="display:flex;gap:8px"><input class="fld" readonly value="${esc(url)}"><button class="btn" data-act="copy" data-text="${esc(url)}">Copy</button></div></label>`;
   $('#main').innerHTML = `<div class="h"><h1>Channels</h1><button class="btn p" data-act="edit" data-id="new">New channel</button></div>${rows}
     <div class="card"><h2>Tuner links</h2><div class="cols">${link('M3U playlist (HLS)', info.m3u)}${link('M3U playlist (MPEG-TS, for Plex)', info.m3u_ts)}${link('XMLTV guide', info.xmltv)}${link('Plex / Jellyfin tuner address (add as an HDHomeRun device)', info.hdhr)}</div>
-    <div class="sub">Channels only start encoding when someone tunes in, and stop shortly after the last viewer leaves.</div></div>`;
+    <div class="sub">Channels with 24/7 off only start encoding when someone tunes in, and stop shortly after the last viewer leaves. 24/7 channels encode all the time, which uses more of the NAS. Turning a channel Off hides it from Plex and the playlists (rescan the tuner in Plex to drop it there).</div></div>`;
   S.timer = setInterval(() => { if (S.view === 'channels') viewChannels(); }, 15000);
 }
 
@@ -400,7 +413,14 @@ document.addEventListener('click', async e => {
     }
   } catch (err) { toast(err.message); }
 });
-document.addEventListener('change', e => {
+document.addEventListener('change', async e => {
+  const flag = e.target.dataset && e.target.dataset.flag;
+  if (flag) {
+    e.target.disabled = true;
+    try { await api('PUT', `/api/channels/${e.target.dataset.id}/flags`, {[flag]: e.target.checked}); }
+    catch (err) { toast(err.message); }
+    return viewChannels();
+  }
   if (e.target.id === 'f-type') { toggleSource(); previewFolder(); }
   if (e.target.id === 'g-win') { G.win = parseInt(e.target.value, 10); renderGuide(); }
   if (e.target.id === 'g-day') { const i = parseInt(e.target.value, 10); G.t0 = i === 0 ? Math.floor(G.data.now / 1800) * 1800 : dayStart(i); renderGuide(); }

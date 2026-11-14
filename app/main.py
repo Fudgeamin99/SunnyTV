@@ -24,7 +24,7 @@ STATIC = os.path.join(os.path.dirname(__file__), "static")
 @asynccontextmanager
 async def lifespan(app):
     os.makedirs(store.DATA_DIR, exist_ok=True)
-    for fn in (media.prober_loop, youtube.worker_loop, youtube.scheduler_loop):
+    for fn in (media.prober_loop, youtube.worker_loop, youtube.scheduler_loop, streamer.keepalive_loop):
         threading.Thread(target=fn, daemon=True).start()
     yield
 
@@ -51,6 +51,13 @@ class ChannelIn(BaseModel):
     ad_group_id: Optional[str] = None
     ad_break_seconds: int = Field(60, ge=0, le=600)
     ad_break_every: int = Field(15, ge=0, le=120)
+    enabled: Optional[bool] = None       # None = leave as it is
+    always_on: Optional[bool] = None
+
+
+class FlagsIn(BaseModel):
+    enabled: Optional[bool] = None
+    always_on: Optional[bool] = None
 
 
 class AdGroupIn(BaseModel):
@@ -78,8 +85,13 @@ def public(cfg, ch):
     vids = [s for s in tl["segments"] if s["kind"] == "video" and s.get("part", 0) == 0]
     out = {k: ch.get(k) for k in ("id", "number", "name", "source", "order", "ad_group_id",
                                   "ad_break_seconds", "sync_status", "last_sync")}
-    out.update({"ad_break_every": ch.get("ad_break_every", 15), "videos": len(vids), "now": now, "live": streamer.is_live(ch["id"])})
+    out.update({"enabled": ch.get("enabled", True), "always_on": ch.get("always_on", False),
+                "ad_break_every": ch.get("ad_break_every", 15), "videos": len(vids), "now": now, "live": streamer.is_live(ch["id"])})
     return out
+
+
+def _enabled(cfg):
+    return [c for c in cfg["channels"] if c.get("enabled", True)]
 
 
 def get_channel_or_404(cfg, ch_id):
@@ -146,6 +158,8 @@ def create_channel(body: ChannelIn):
             raise HTTPException(409, "That channel number is already in use")
         ch = {"id": store.new_id(), **body.model_dump(), "anchor": time.time(),
               "yt_items": [], "next_sync": 0, "sync_status": "never", "last_sync": None}
+        ch["enabled"] = True if body.enabled is None else body.enabled
+        ch["always_on"] = bool(body.always_on)
         cfg["channels"].append(ch)
     if ch["source"]["type"] == "youtube":
         youtube.enqueue(ch["id"])
@@ -168,10 +182,33 @@ def update_channel(ch_id: str, body: ChannelIn):
         ch.update(number=body.number, name=body.name, source=new, order=body.order,
                   ad_group_id=body.ad_group_id, ad_break_seconds=body.ad_break_seconds,
                   ad_break_every=body.ad_break_every)
+        if body.enabled is not None:
+            ch["enabled"] = body.enabled
+        if body.always_on is not None:
+            ch["always_on"] = body.always_on
     if resync:
         youtube.enqueue(ch_id)
     media.kick()
     return {"ok": True}
+
+
+@app.put("/api/channels/{ch_id}/flags")
+def set_flags(ch_id: str, body: FlagsIn):
+    """The two switches on the Channels page: on/off, and keep running 24/7."""
+    with store.edit() as cfg:
+        ch = get_channel_or_404(cfg, ch_id)
+        if body.enabled is not None:
+            ch["enabled"] = body.enabled
+        if body.always_on is not None:
+            ch["always_on"] = body.always_on
+        enabled, always = ch.get("enabled", True), ch.get("always_on", False)
+    if not enabled:
+        streamer.stop(ch_id)
+    elif always:
+        streamer.ensure(ch_id, always=True)
+    else:
+        streamer.release(ch_id)
+    return {"ok": True, "enabled": enabled, "always_on": always}
 
 
 @app.delete("/api/channels/{ch_id}")
@@ -289,7 +326,7 @@ def guide(hours: int = 168):
     cfg = store.load()
     t = time.time()
     chans = []
-    for ch in sorted(cfg["channels"], key=lambda c: c["number"]):
+    for ch in sorted(_enabled(cfg), key=lambda c: c["number"]):
         tl = schedule.build_timeline(cfg, ch)
         chans.append({"id": ch["id"], "number": ch["number"], "name": ch["name"],
                       "programmes": schedule.programmes(tl, ch, hours, t)})
@@ -300,7 +337,7 @@ def guide(hours: int = 168):
 def m3u(request: Request, format: str = "hls"):
     b = base_url(request)
     lines = [f'#EXTM3U url-tvg="{b}/iptv/xmltv.xml" x-tvg-url="{b}/iptv/xmltv.xml"']
-    for ch in sorted(store.load()["channels"], key=lambda c: c["number"]):
+    for ch in sorted(_enabled(store.load()), key=lambda c: c["number"]):
         n = ch["number"]
         name = ch["name"].replace('"', "'")
         lines.append(f'#EXTINF:-1 tvg-id="sunnytv.{n}" tvg-chno="{n}" tvg-name="{name}" '
@@ -337,7 +374,7 @@ def hdhr_lineup(request: Request):
     b = base_url(request)
     return [{"GuideNumber": str(c["number"]), "GuideName": c["name"], "HD": 1,
              "URL": f"{b}/stream/{c['number']}.ts"}
-            for c in sorted(store.load()["channels"], key=lambda c: c["number"])]
+            for c in sorted(_enabled(store.load()), key=lambda c: c["number"])]
 
 
 @app.post("/lineup.post")
@@ -368,7 +405,7 @@ def xmltv(hours: int = 168):
     cfg = store.load()
     t = time.time()
     parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv generator-info-name="Sunny TV">']
-    chans = sorted(cfg["channels"], key=lambda c: c["number"])
+    chans = sorted(_enabled(cfg), key=lambda c: c["number"])
     for ch in chans:
         parts.append(f'<channel id="sunnytv.{ch["number"]}"><display-name>{_x(ch["name"])}</display-name>'
                      f'<display-name>{ch["number"]}</display-name></channel>')
@@ -385,8 +422,8 @@ def xmltv(hours: int = 168):
 
 def _by_number(number):
     ch = store.find_channel_by_number(store.load(), number)
-    if not ch:
-        raise HTTPException(404, "no such channel")
+    if not ch or not ch.get("enabled", True):
+        raise HTTPException(404, "no such channel (or it is turned off)")
     return ch
 
 
@@ -395,7 +432,7 @@ async def hls_file(number: int, filename: str):
     if not re.fullmatch(r"index\.m3u8|seg_\d{6}\.ts", filename):
         raise HTTPException(404)
     ch = _by_number(number)
-    streamer.ensure(ch["id"])
+    streamer.ensure(ch["id"], always=bool(ch.get("always_on")))
     if filename == "index.m3u8":
         if not await streamer.wait_ready(ch["id"]):
             raise HTTPException(503, "This channel has nothing to play yet")
@@ -410,7 +447,7 @@ async def hls_file(number: int, filename: str):
 async def stream_ts(number: int):
     """Continuous MPEG-TS, for players (like Plex) that prefer it over HLS."""
     ch = _by_number(number)
-    runner = streamer.ensure(ch["id"])
+    runner = streamer.ensure(ch["id"], always=bool(ch.get("always_on")))
     if not await streamer.wait_ready(ch["id"]):
         raise HTTPException(503, "This channel has nothing to play yet")
     proc = await asyncio.create_subprocess_exec(
