@@ -111,14 +111,36 @@ def _clean_vtt(vtt_path, srt_path):
     return len(cues)
 
 
+NOCC_DAYS = 3
+
+
+def _nocc_path(dest, video_id, lang):
+    return os.path.join(dest, f"{video_id}.{lang}.nocc")
+
+
+def has_cached_result(dest, video_id, lang):
+    """True if we already know the answer for this video (captions saved, or confirmed none lately).
+    Markers left by older versions (.nosubs) are not trusted: they were sometimes written by mistake."""
+    legacy = os.path.join(dest, f"{video_id}.{lang}.nosubs")
+    if os.path.exists(legacy):
+        try:
+            os.remove(legacy)
+        except OSError:
+            pass
+    if os.path.exists(os.path.join(dest, f"{video_id}.{lang}.srt")):
+        return True
+    m = _nocc_path(dest, video_id, lang)
+    return os.path.exists(m) and time.time() - os.path.getmtime(m) < NOCC_DAYS * 86400
+
+
 def fetch_subs(video_id, dest, lang):
     """Download captions for one video and leave <id>.srt next to it. Returns the path, or None
     if the video has no captions in that language (remembered, so it is not retried every sync)."""
     srt = os.path.join(dest, f"{video_id}.{lang}.srt")
-    none = os.path.join(dest, f"{video_id}.{lang}.nosubs")
+    none = _nocc_path(dest, video_id, lang)
     if os.path.exists(srt):
         return srt
-    if os.path.exists(none):
+    if has_cached_result(dest, video_id, lang):
         return None
     cmd = [c for c in _base() if c != "--no-warnings"] + [
         "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", f"{lang},{lang}-orig",
@@ -178,6 +200,9 @@ def sync_channel(ch_id):
     dest = os.path.join(media.CACHE_DIR, ch_id)
     old = {it["id"]: it for it in ch.get("yt_items", [])}
     items, errors = [], 0
+    sub_ok = sub_fail = 0
+    sub_err = ""
+    sub_blocked = False          # YouTube refused us: stop asking for the rest of this sync
 
     def merged(i):
         later = [old[e["id"]] for e in entries[i:] if e["id"] in old and os.path.exists(old[e["id"]]["path"])]
@@ -197,10 +222,29 @@ def sync_channel(ch_id):
             if d:
                 item = {"id": e["id"], "title": e["title"], "path": path, "duration": d}
                 if want_subs:
-                    try:
-                        item["subs"] = fetch_subs(e["id"], dest, lang)
-                    except Exception as ex:
-                        print(f"[{ch_id}] subtitles failed for {e['id']}: {ex}", flush=True)
+                    cached = has_cached_result(dest, e["id"], lang)
+                    if sub_blocked and not cached:
+                        sub_fail += 1
+                    else:
+                        store.update_channel(ch_id, sync_status=f"subtitles {i}/{len(entries)}")
+                        for attempt in (1, 2):
+                            try:
+                                item["subs"] = fetch_subs(e["id"], dest, lang)
+                                break
+                            except Exception as ex:
+                                sub_err = str(ex)
+                                print(f"[{ch_id}] subtitles failed for {e['id']}: {ex}", flush=True)
+                                if attempt == 1 and ("429" in sub_err or "Too Many" in sub_err):
+                                    time.sleep(45)          # rate limited: wait, then try once more
+                                    continue
+                                if "429" in sub_err or "Too Many" in sub_err:
+                                    sub_blocked = True
+                                sub_fail += 1
+                                break
+                        if not cached:
+                            time.sleep(4)                   # be gentle: one caption request every few seconds
+                    if item.get("subs"):
+                        sub_ok += 1
                 items.append(item)
         store.update_channel(ch_id, yt_items=merged(i))
     media.flush()
@@ -219,8 +263,13 @@ def sync_channel(ch_id):
                     pass
 
     status = f"ok, {len(items)} videos" + (f" ({errors} failed)" if errors else "")
+    if want_subs:
+        status += f", subtitles on {sub_ok}"
+        if sub_fail:
+            status += f" ({sub_fail} not yet: {sub_err or 'rate limited'})"
+    retry = sub_fail > 0                                    # come back soon to fetch the missing captions
     store.update_channel(ch_id, yt_items=items, last_sync=time.time(),
-                         next_sync=time.time() + hours * 3600, sync_status=status)
+                         next_sync=time.time() + (900 if retry else hours * 3600), sync_status=status)
 
 
 def remove_cache(ch_id):
